@@ -169,3 +169,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Ignorer les fichiers Excel
+*.xlsx
+
+# Ignorer le dossier program_download
+program_download/

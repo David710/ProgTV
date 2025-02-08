@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from io import BytesIO
 from datetime import datetime
+import json
 
 class TVProgram():
     def __init__(self):
@@ -28,7 +29,7 @@ class TVProgram():
             data = response.json()
             # Charger en DataFrame
             df = pd.DataFrame(data["data"])
-            df.to_excel(f"{self.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.xlsx", index=False)
+            df.to_pickle(f"{self.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl")
             return df
         except requests.exceptions.RequestException as e:
             print(f"Erreur lors de la récupération des données : {e}")
@@ -38,17 +39,31 @@ class TVProgram():
         """Lire les données des programmes TV"""
         try:
             # Charger le fichier Excel
-            df = pd.read_excel(file)
+            df = pd.read_pickle(file)
             return df
         except FileNotFoundError:
             print(f"Le fichier {file} est introuvable.")
             return None
         
+    def format_programs(self, programs):
+        """Formater les programmes TV
+        - transformer la colonne 'programs' en DataFrame
+        - Convertir les dates de début et de fin en datetime
+        """
+        df_programs = pd.DataFrame(programs)
+        df_programs.start = pd.to_datetime(df_programs.start, unit="s")
+        df_programs.end = pd.to_datetime(df_programs.end, unit="s")
+        return df_programs
+    
     def filter_programs(self, df, channels):
-        """Filtrer les programmes TV par chaîne"""
+        """Filtrer les programmes TV par chaîne
+        - Filtrer les données par colonne 'name'
+        - Appliquer la fonction format_programs
+        """
         try:
             # Filtrer les données
             filtered_df = df[df["name"].isin(channels)]
+            filtered_df["programs"] = filtered_df["programs"].apply(self.format_programs)
             return filtered_df
         except KeyError:
             print("Le DataFrame ne contient pas de colonne 'name'.")
@@ -59,7 +74,7 @@ if __name__ == "__main__":
     tv_program = TVProgram()
     # Récupérer les données
     # progs = tv_program.get_programs(tv_program.downloading_url)
-    file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.xlsx"
+    file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
     progs = tv_program.read_programs(file_name)
     progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
     print(progs_filtered["name"].unique())
