@@ -6,6 +6,10 @@ from PIL import Image
 from io import BytesIO
 from datetime import datetime
 import json
+from transformers import CamembertTokenizer, CamembertModel
+import torch
+from langchain_community.embeddings import OllamaEmbeddings
+import numpy as np
 
 class TVProgram():
     def __init__(self):
@@ -63,11 +67,41 @@ class TVProgram():
         try:
             # Filtrer les données
             filtered_df = df[df["name"].isin(channels)]
-            filtered_df["programs"] = filtered_df["programs"].apply(self.format_programs)
+            filtered_df.loc[:, "programs"] = filtered_df["programs"].apply(self.format_programs)
             return filtered_df
         except KeyError:
             print("Le DataFrame ne contient pas de colonne 'name'.")
             return None
+        
+    def generate_embeddings(self, df, model_name):
+        df = df.copy()
+        if model_name == "camembert":
+            # Charger le tokenizer et le modèle
+            tokenizer = CamembertTokenizer.from_pretrained('camembert-base')
+            model = CamembertModel.from_pretrained('camembert-base')
+
+            # Fonction pour générer des embeddings
+            def generate_embeddings(text):
+                inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True, max_length=512)
+                outputs = model(**inputs)
+                return outputs.last_hidden_state.mean(dim=1).detach().numpy()
+        elif model_name == "llama3":
+            # Charger le modèle d'embeddings
+            embed_model = OllamaEmbeddings(model="llama3:latest", show_progress=True)
+
+            # Fonction pour générer des embeddings
+            def generate_embeddings(text):
+                return np.array(embed_model.embed_query(text))
+
+        def flow_through_programs(program):
+            program[f'embeddings_{model_name}'] = program["desc"].apply(generate_embeddings)
+            return program
+        
+        # Appliquer la fonction à la colonne "desc"
+        df["programs"] = df["programs"].apply(flow_through_programs)
+        return df
+
+            
 
 if __name__ == "__main__":
     # Créer une instance de la classe TVProgram
@@ -77,4 +111,5 @@ if __name__ == "__main__":
     file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
     progs = tv_program.read_programs(file_name)
     progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
-    print(progs_filtered["name"].unique())
+    progs_filtered = tv_program.generate_embeddings(progs_filtered, "camembert")
+    print(progs_filtered.programs.iloc[0].head())
