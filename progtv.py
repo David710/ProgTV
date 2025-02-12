@@ -10,11 +10,17 @@ from transformers import CamembertTokenizer, CamembertModel
 import torch
 from langchain_community.embeddings import OllamaEmbeddings
 import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 
 class TVProgram():
     def __init__(self):
         self.downloading_url = "https://daga123-tv-api.onrender.com/getPrograms"
         self.download_folder = "program_download"
+        self.train_folder = "train"
         self.channels = ['TF1', 'France 2', 'France 3', 'Canal+', 'France 5', 'M6', 'Arte',
        'C8', 'W9', 'TMC', 'TFX', 'NRJ12', 'LCP', 'France 4', 'Gulli', 'TF1 Séries-Films',
        'La chaine l’Équipe', '6ter', 'RMC STORY', 'RMC Découverte',
@@ -73,7 +79,7 @@ class TVProgram():
             print("Le DataFrame ne contient pas de colonne 'name'.")
             return None
         
-    def generate_embeddings(self, df, model_name):
+    def generate_embeddings(self, df, model_name, file_name):
         df = df.copy()
         if model_name == "camembert":
             # Charger le tokenizer et le modèle
@@ -99,9 +105,90 @@ class TVProgram():
         
         # Appliquer la fonction à la colonne "desc"
         df["programs"] = df["programs"].apply(flow_through_programs)
+        df.to_pickle(file_name)
         return df
+    
+    def train_model(self, file_name):
+        # Préparer les données
+        df = pd.read_pickle(self.train_folder + "/" + file_name)
 
+        # Encoder la colonne "cat"
+        label_encoder_cat = LabelEncoder()
+        label_encoder_rating = LabelEncoder()
+        df['cat_encoded'] = label_encoder_cat.fit_transform(df['cat'])
+        df['rating_encoded'] = label_encoder_rating.fit_transform(df['rating'])
+
+        # Séparer les caractéristiques (features) et la cible (target)
+        X = np.hstack((df[['rating_encoded', 'cat_encoded']].values, np.vstack(df['embeddings'])))
+        y = df['note'].values
+
+        # Diviser les données en ensembles d'entraînement et de test
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Normaliser les caractéristiques
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Convertir les données en tenseurs PyTorch
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
+
+        # Créer des DataLoader pour l'entraînement et le test
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+        # Construire le modèle
+        class NeuralNetwork(nn.Module):
+            def __init__(self, input_dim):
+                super(NeuralNetwork, self).__init__()
+                self.fc1 = nn.Linear(input_dim, 128)
+                self.dropout1 = nn.Dropout(0.2)
+                self.fc2 = nn.Linear(128, 64)
+                self.dropout2 = nn.Dropout(0.2)
+                self.fc3 = nn.Linear(64, 1)
+
+            def forward(self, x):
+                x = torch.relu(self.fc1(x))
+                x = self.dropout1(x)
+                x = torch.relu(self.fc2(x))
+                x = self.dropout2(x)
+                x = self.fc3(x)
+                return x
+
+        input_dim = X_train.shape[1]
+        model = NeuralNetwork(input_dim)
+
+        # Définir la fonction de perte et l'optimiseur
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+        # Entraîner le modèle
+        num_epochs = 50
+        for epoch in range(num_epochs):
+            model.train()
+            for X_batch, y_batch in train_loader:
+                optimizer.zero_grad()
+                outputs = model(X_batch)
+                loss = criterion(outputs, y_batch)
+                loss.backward()
+                optimizer.step()
             
+            print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
+        
+        # Sauvegarder le modèle
+        model_file_path = f"{self.train_folder}/trained_model.pth"
+        self.save_model(model, model_file_path)
+        return model
+
+    def save_model(self, model, file_path):
+        torch.save(model.state_dict(), file_path)
+        print(f"Model saved to {file_path}")
+                
 
 if __name__ == "__main__":
     # Créer une instance de la classe TVProgram
@@ -109,7 +196,10 @@ if __name__ == "__main__":
     # Récupérer les données
     # progs = tv_program.get_programs(tv_program.downloading_url)
     file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
-    progs = tv_program.read_programs(file_name)
-    progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
-    progs_filtered = tv_program.generate_embeddings(progs_filtered, "camembert")
+    # progs = tv_program.read_programs(file_name)
+    # progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
+    # progs_filtered = tv_program.generate_embeddings(progs_filtered, "camembert", file_name)
+    progs_filtered = tv_program.read_programs(file_name)
+    tv_program.train_model("df_programs_tf1_note.pkl")
+    
     print(progs_filtered.programs.iloc[0].head())

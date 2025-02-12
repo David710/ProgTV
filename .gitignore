@@ -173,5 +173,8 @@ cython_debug/
 # Ignorer les fichiers Excel
 *.xlsx
 
+# Ignorer les fichiers pkl
+*.pkl
+
 # Ignorer le dossier program_download
 program_download/
