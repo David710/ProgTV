@@ -241,10 +241,13 @@ class TVProgram():
             prime_time_progs.loc[:, "duration"] = (prime_time_progs["end"] - prime_time_progs["start"]).dt.total_seconds() / 60
 
             # Find the program with the maximum duration
-            prime_program = prime_time_progs.loc[prime_time_progs["duration"] == prime_time_progs["duration"].max()]
-            prime_program.loc[:, "channel_name"] = row["name"]
-            prime_program.loc[:, "channel_icon"] = row["icon"]
-            prime_programs = pd.concat([prime_programs, prime_program])
+            try:
+                prime_program = prime_time_progs.loc[prime_time_progs["duration"] == prime_time_progs["duration"].max()]
+                prime_program.loc[:, "channel_name"] = row["name"]
+                prime_program.loc[:, "channel_icon"] = row["icon"]
+                prime_programs = pd.concat([prime_programs, prime_program])
+            except:
+                pass
         return prime_programs
 
 if __name__ == "__main__":
@@ -252,18 +255,15 @@ if __name__ == "__main__":
     tv_program = TVProgram()
     # Récupérer les données
     # progs = tv_program.get_programs(tv_program.downloading_url)
-    # file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
-    # progs = tv_program.read_programs(file_name)
-    # progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
-    # progs_filtered = tv_program.generate_embeddings(progs_filtered, "camembert", file_name)
-    # progs_filtered = tv_program.read_programs(file_name)
+    file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
+    progs = tv_program.read_programs(file_name)
+    progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
+    progs_filtered = tv_program.generate_embeddings(progs_filtered, "camembert", file_name)
+    progs_filtered = tv_program.read_programs(file_name)
     # tv_program.train_model("df_programs_tf1_note.pkl")
-    # model = tv_program.load_model("train/trained_model.pth", tv_program.input_dim)
-    # rated_progs = tv_program.rate_programs(model, progs_filtered, embedding_type="camembert")
+    model = tv_program.load_model("train/trained_model.pth", tv_program.input_dim)
+    rated_progs = tv_program.rate_programs(model, progs_filtered, embedding_type="camembert")
     file_name_rated = f"{tv_program.download_folder}/progtv_rated_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
     rated_progs = tv_program.read_programs(file_name_rated)
-    # print(rated_progs.iloc[0]['programs'].head())
-    # print(rated_progs.iloc[0]['programs'][rated_progs.iloc[1]['programs']["note_pred"] == rated_progs.iloc[1]['programs']["note_pred"].max()])
-    # print(rated_progs.iloc[0]['programs'].iloc[68][["name", "cat", "note_pred", "desc"]])
 
-    print(rated_progs.iloc[4  ]['programs'][['name', 'note_pred', 'desc']].sort_values(by='note_pred', ascending=False).head(20))
+    print(rated_progs.iloc[4]['programs'][['name', 'note_pred', 'desc']].sort_values(by='note_pred', ascending=False).head(20))
