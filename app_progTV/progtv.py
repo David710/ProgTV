@@ -254,7 +254,7 @@ if __name__ == "__main__":
     # Créer une instance de la classe TVProgram
     tv_program = TVProgram()
     # Récupérer les données
-    # progs = tv_program.get_programs(tv_program.downloading_url)
+    progs = tv_program.get_programs(tv_program.downloading_url)
     file_name = f"{tv_program.download_folder}/progtv_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
     progs = tv_program.read_programs(file_name)
     progs_filtered = tv_program.filter_programs(progs, tv_program.channels)
