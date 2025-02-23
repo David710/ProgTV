@@ -25,5 +25,17 @@ def get_programs():
     prime_programs_filtered = prime_programs[['name', 'start',  'icon', 'rating', 'cat', 'desc', 'note_pred','duration', 'channel_name', 'channel_icon']]
     return jsonify(prime_programs_filtered.to_dict(orient='records'))
 
+@app.route('/api/suggestions')
+def get_suggestions():
+    number_of_suggestions = 5
+    channels = ['TF1', 'France 2', 'France 3']
+    tv_program = progtv.TVProgram()
+    current_directory = Path.cwd()
+    file_name_rated = f"{current_directory}/{tv_program.download_folder}/progtv_rated_{datetime.now().today().strftime('%Y-%m-%d')}.pkl"
+    rated_progs = tv_program.read_programs(file_name_rated)
+    best_programs = tv_program.get_best_programs(rated_progs, n=number_of_suggestions, whitelist=channels)
+    best_programs_filtered = best_programs[['name', 'start',  'icon', 'rating', 'cat', 'desc', 'note_pred','duration', 'channel_name', 'channel_icon']]
+    return jsonify(best_programs_filtered.to_dict(orient='records'))
+
 if __name__ == '__main__':
     app.run(debug=True)

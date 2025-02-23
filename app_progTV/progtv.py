@@ -249,6 +249,30 @@ class TVProgram():
             except:
                 pass
         return prime_programs
+    
+    def get_best_programs(self, rated_progs, n=5, whitelist=None):
+        best_progs = pd.DataFrame()
+        best_progs_whitelist = pd.DataFrame()
+        for i, row in rated_progs.iterrows():
+            best_prog = row.programs.nlargest(n, "note_pred")
+            # Calculate the duration of each program
+            best_prog.loc[:, "duration"] = (best_prog["end"] - best_prog["start"]).dt.total_seconds() / 60
+            # add channel name and icon
+            try:
+                best_prog.loc[:, "channel_name"] = row["name"]
+                best_prog.loc[:, "channel_icon"] = row["icon"]
+            except:
+                    pass
+            best_progs = pd.concat([best_progs, best_prog])
+            # drop duplicates programs
+            best_progs = best_progs.drop_duplicates(subset=["name"])
+            for channel in whitelist:
+                best_prog_whitelist = best_progs[best_progs["channel_name"] == channel].nlargest(1, "note_pred")
+                best_progs_whitelist = pd.concat([best_progs_whitelist, best_prog_whitelist])
+            best_progs = best_progs.nlargest(n, "note_pred")
+            best_progs = pd.concat([best_progs, best_progs_whitelist])
+            best_progs = best_progs.drop_duplicates(subset=["name"])
+        return best_progs
 
 if __name__ == "__main__":
     # Créer une instance de la classe TVProgram
