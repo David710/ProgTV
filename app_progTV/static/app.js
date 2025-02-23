@@ -1,3 +1,17 @@
+function formatAsPercentage(decimal) {
+    return (decimal * 100).toFixed(0) + '%';
+}
+
+function formatDuration(minutes) {
+    if (minutes >= 60) {
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return `${hours}h ${remainingMinutes}min`;
+    } else {
+        return `${minutes}min`;
+    }
+}
+
 // Fetch the JSON data from the Flask endpoint
 fetch('/api/programs')
     .then(response => response.json())
@@ -21,23 +35,27 @@ fetch('/api/programs')
             startTime.setHours(startTime.getHours() - 1);
             const formattedStartTime = startTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
+            // Format note_pred as a percentage
+            const formattedNotePred = formatAsPercentage(program.note_pred);
+
+            // Format duration
+            const formattedDuration = formatDuration(program.duration);
+
             programElement.innerHTML = `
                 <img src="${program.icon}" alt="Program Image" class="card-img-top">
-                <img src="${program.channel_icon}" alt="Channel Icon" class="col channel-icon">
                 <div class="card-body">
-                    <div class="container text-center">
-                        <div class="row justify-content-center">
-                            <p class="col col-2 card-title p-2">${formattedStartTime}</p>
-                            <h5 class="col col-8 card-title p-2">${program.name}</h5>
-                            <p class="col col-2 card-title p-2"> </p>
-                        </div>
+                    <div class="d-flex justify-content-start align-items-center flex-row mb-3">
+                        <img src="${program.channel_icon}" alt="Channel Icon" class="channel-icon p-2">
+                        <p class="card-title p-2"><span class="badge text-bg-light">${formattedStartTime}</span></p>
+                        <h5 class="card-title p-2">${program.name}</h5>
                     </div>
                     <p class="card-text">${program.desc}</p>
-                    <p>Rating: ${program.rating}</p>
-                    <p>Category: ${program.cat}</p>
-                    <p>Note: ${program.note_pred}</p>
-                    <p>Duration: ${program.duration} minutes</p>
-                    
+                    <div class="d-flex justify-content-start align-items-center flex-row mb-3">
+                        <p class="card-text p-2 info-add"><span class="badge text-bg-primary">${program.rating}</span></p>
+                        <p class="card-text p-2 info-add"><span class="badge text-bg-secondary">${program.cat}</span></p>
+                        <p class="card-text p-2 info-add"><span class="badge text-bg-danger">${formattedNotePred}</span></p>
+                        <p class="card-text p-2 info-add"><span class="badge text-bg-light">${formattedDuration}</span></p>
+                    </div>
                 </div>
             `;
             programGroup.appendChild(programElement);
@@ -54,13 +72,3 @@ const formattedDate = currentDate.toLocaleDateString('fr-FR', options);
 // Update the page title with the current day and month
 const pageTitle = document.getElementById('page-title');
 pageTitle.innerHTML = `Programmes du ${formattedDate}`;
-
-{/* <h2>${program.name}</h2>
-<p>Start: ${program.start}</p>
-<p>Rating: ${program.rating}</p>
-<p>Category: ${program.cat}</p>
-<p>Description: ${program.desc}</p>
-<p>Note: ${program.note_pred}</p>
-<p>Duration: ${program.duration} minutes</p>
-<p>Channel: ${program.channel_name}</p>
-<img src="${program.icon}" alt="Channel Icon"> */}

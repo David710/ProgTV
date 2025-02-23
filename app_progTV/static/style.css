@@ -69,3 +69,8 @@ h1 {
 .card-body {
     padding-top: 0px !important;
 }
+
+.info-add {
+    margin-bottom: auto;
+    text-align: center; 
+}
