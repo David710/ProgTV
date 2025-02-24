@@ -116,7 +116,9 @@ function getSuggestions() {
                 // Subtract one hour from program.start
                 const startTime = new Date(program.start);
                 startTime.setHours(startTime.getHours() - 1);
+                const dayName = startTime.toLocaleDateString('fr-FR', { weekday: 'long' });
                 const formattedStartTime = startTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                const formattedStart = `${dayName} ${formattedStartTime}`;
 
                 // Format note_pred as a percentage
                 const formattedNotePred = formatAsPercentage(program.note_pred);
@@ -129,7 +131,7 @@ function getSuggestions() {
                     <div class="card-body">
                         <div class="d-flex justify-content-start align-items-center flex-row mb-3">
                             <img src="${program.channel_icon}" alt="Channel Icon" class="channel-icon p-2">
-                            <p class="card-title p-2"><span class="badge text-bg-light">${formattedStartTime}</span></p>
+                            <p class="card-title p-2"><span class="badge text-bg-light">${formattedStart}</span></p>
                             <h5 class="card-title p-2">${program.name}</h5>
                         </div>
                         <p class="card-text">${program.desc}</p>

@@ -35,6 +35,7 @@ def get_suggestions():
     rated_progs = tv_program.read_programs(file_name_rated)
     best_programs = tv_program.get_best_programs(rated_progs, n=number_of_suggestions, whitelist=channels)
     best_programs_filtered = best_programs[['name', 'start',  'icon', 'rating', 'cat', 'desc', 'note_pred','duration', 'channel_name', 'channel_icon']]
+    print(best_programs_filtered)
     return jsonify(best_programs_filtered.to_dict(orient='records'))
 
 if __name__ == '__main__':
