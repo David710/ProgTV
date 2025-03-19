@@ -74,3 +74,7 @@ h1 {
     margin-bottom: auto;
     text-align: center; 
 }
+
+.ai-comments {
+    text-align: justify;
+}

@@ -66,9 +66,23 @@ function getPrograms() {
                 programGroup.appendChild(programElement);
                 iRow++;
             });
+
+            // Add event listeners to the love-link elements
+            document.querySelectorAll('.love-link').forEach(link => {
+                link.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    const aiCommentsDiv = this.nextElementSibling;
+                    if (aiCommentsDiv.style.display === 'none') {
+                        aiCommentsDiv.style.display = 'block';
+                        this.textContent = 'Cacher le commentaire';
+                    } else {
+                        aiCommentsDiv.style.display = 'none';
+                        this.textContent = 'Pourquoi je vais aimer ?';
+                    }
+                });
+            });
         })
         .catch(error => console.error('Error fetching data:', error));
-
 } //end get_programs
 
 // Call the get_programs function on page load
@@ -88,7 +102,8 @@ document.getElementById('prog-day-link').addEventListener('click', function(even
 // Add event listener to the #suggestions-link link
 document.getElementById('suggestions-link').addEventListener('click', function(event) {
     event.preventDefault(); // Prevent the default link behavior
-    getSuggestions(); // Call the getPrograms function
+    getSuggestions(); // Call the getSuggestions function
+    getAiComments(); // Call the getAiComments function
 });
 
 function getSuggestions() {
@@ -141,12 +156,48 @@ function getSuggestions() {
                             <p class="card-text p-2 info-add"><span class="badge text-bg-danger">${formattedNotePred}</span></p>
                             <p class="card-text p-2 info-add"><span class="badge text-bg-light">${formattedDuration}</span></p>
                         </div>
+                        <div id="${program.name}">
+                            <a href="#" class="btn btn-link love-link">Pourquoi je vais aimer ?</a>
+                            <div class="ai-comments" style="display: none;"></div>
+                        </div>
                     </div>
                 `;
                 programGroup.appendChild(programElement);
                 iRow++;
             });
+
+            // Add event listeners to the love-link elements
+            document.querySelectorAll('.love-link').forEach(link => {
+                link.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    const aiCommentsDiv = this.nextElementSibling;
+                    if (aiCommentsDiv.style.display === 'none') {
+                        aiCommentsDiv.style.display = 'block';
+                        this.textContent = 'Cacher le commentaire';
+                    } else {
+                        aiCommentsDiv.style.display = 'none';
+                        this.textContent = 'Pourquoi je vais aimer ?';
+                    }
+                });
+            });
         })
         .catch(error => console.error('Error fetching data:', error));
-
 } //end get_suggestions
+
+function getAiComments() {
+    // Fetch the JSON data from the Flask endpoint
+    fetch('/api/ai_comments')
+        .then(response => response.json())
+        .then(data => {
+            // Process the JSON data
+            console.log(data);
+            data.forEach(program => {
+                const aiCommentsDiv = document.getElementById(`${program.name}`).querySelector('.ai-comments');
+                aiCommentsDiv.innerHTML = `${program['ollama_comment']}`;
+            });
+        })
+        .catch(error => console.error('Error fetching data:', error));
+} //end getAiComments
+
+
+

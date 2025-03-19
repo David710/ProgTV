@@ -15,6 +15,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+import ollama
 
 # Construire le modèle
 class NeuralNetwork(nn.Module):
@@ -275,6 +276,24 @@ class TVProgram():
             best_progs = best_progs.drop_duplicates(subset=["name"])
             best_progs = best_progs.fillna("")
         return best_progs
+    
+    def get_ollama_comment(self, program_desc):
+        response = ollama.chat(
+            model="llama3",
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"j'aime les films d'action et les polars, j'aime également les émissions de cuisine, est ce que je vais aimer ce programme ?: {program_desc}, répond en français", 
+                },
+            ],
+        )
+        return response["message"]["content"]
+    
+    def add_ollama_comment_to_dataset(self, df):
+        df = df.copy()
+        df["ollama_comment"] = df["desc"].apply(self.get_ollama_comment)
+        return df
+
 
 if __name__ == "__main__":
     # Créer une instance de la classe TVProgram
