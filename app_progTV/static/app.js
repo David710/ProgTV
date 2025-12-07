@@ -2,13 +2,19 @@ function formatAsPercentage(decimal) {
     return (decimal * 100).toFixed(0) + '%';
 }
 
+
 function formatDuration(minutes) {
     if (minutes >= 60) {
-        const hours = Math.floor(minutes / 60);
-        const remainingMinutes = minutes % 60;
+        let hours = Math.floor(minutes / 60);
+        let remainingMinutes = Math.round(minutes % 60);
+        if (remainingMinutes === 60) { // handle rounding rollover
+            hours += 1;
+            remainingMinutes = 0;
+        }
         return `${hours}h ${remainingMinutes}min`;
     } else {
-        return `${minutes}min`;
+        const rounded = Math.round(minutes);
+        return `${rounded}min`;
     }
 }
 

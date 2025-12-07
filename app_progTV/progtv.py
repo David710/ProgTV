@@ -279,11 +279,12 @@ class TVProgram():
     
     def get_ollama_comment(self, program_desc):
         response = ollama.chat(
-            model="llama3",
+            # model="gemma3:12b",
+            model="gemma3:12b-it-qat",
             messages=[
                 {
                     "role": "user",
-                    "content": f"j'aime les films d'action et les polars, j'aime également les émissions de cuisine, est ce que je vais aimer ce programme ?: {program_desc}, répond en français", 
+                    "content": f"j'aime les films d'action et les polars, j'aime également les émissions de cuisine, est ce que je vais aimer ce programme ?: {program_desc}, répond en français, fait un texte assez court de quelques lignes.", 
                 },
             ],
         )
