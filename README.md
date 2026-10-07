@@ -8,9 +8,30 @@ Python 3.11 ou supérieur.
 ```sh
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cd app_progTV
-../.venv/bin/flask --app app run
+./run.sh
 ```
+
+Après installation et préparation du modèle, une seule commande met à jour les
+programmes du jour puis lance l'application sur **http://127.0.0.1:5000** :
+
+```sh
+./run.sh
+```
+
+Le script utilise `.venv/bin/python`, fonctionne aussi depuis un autre dossier
+via son chemin absolu et arrête le lancement si la mise à jour échoue. Le modèle
+historique doit d'abord être réentraîné (voir « Modèle et compatibilité »).
+La préparation peut prendre du temps, surtout au premier téléchargement de
+CamemBERT. Arrêter le serveur avec Ctrl+C.
+
+```sh
+./run.sh --update-only  # actualiser sans démarrer le serveur
+./run.sh --port 8000   # actualiser puis lancer sur un autre port
+./run.sh --help
+```
+
+Pour un environnement Python déjà installé ailleurs :
+`PROGTV_PYTHON=/chemin/venv/bin/python ./run.sh`.
 
 La page fonctionne sans Ollama ; seules les explications en dépendent.
 Pour celles-ci, installer Ollama et récupérer `gemma3:12b-it-qat`.
@@ -24,7 +45,7 @@ stockés relativement au module, indépendamment du répertoire de lancement.
 Exemple de tâche cron quotidienne à 6 h (adapter les chemins et le fuseau du serveur) :
 
 ```cron
-0 6 * * * /chemin/ProgTV/.venv/bin/python /chemin/ProgTV/app_progTV/progtv.py >> /chemin/ProgTV/preparation.log 2>&1
+0 6 * * * /chemin/ProgTV/run.sh --update-only >> /chemin/ProgTV/preparation.log 2>&1
 ```
 
 Le cache noté est remplacé atomiquement après une préparation réussie.

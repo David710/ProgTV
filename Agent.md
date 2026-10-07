@@ -67,6 +67,18 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Limites : pas de vérification visuelle navigateur ni de données source réelles.
     Les nouvelles vues ne créent pas les programmes absents du cache.
 
+- 2026-10-07 : lanceur synthétique `./run.sh` ajouté.
+  - Actualise les programmes puis lance Flask sur 127.0.0.1:5000 ; refuse de
+    démarrer en cas d'échec de préparation. Ne modifie pas les anciens caches.
+  - Mode `--update-only`, options Flask transmises (ex. `--port 8000`), aide,
+    exécutable Python configurable via PROGTV_PYTHON ; chemins absolus internes.
+  - Installation initiale, commande quotidienne et exemple cron documentés.
+  - Validation : syntaxe Bash, aide et essais isolés avec Python simulé : ordre
+    préparation/lancement, mode actualisation seule, arguments, arrêt sur échec,
+    environnement absent, lancement depuis un autre dossier et chemins avec espaces.
+  - Limite : préparation réelle non exécutée, faute de modèle réentraîné et de
+    jeu annoté. Le script n'installe pas automatiquement les dépendances.
+
 ## Prochaine étape
 Ajouter les préférences et les retours utilisateur, puis mesurer leur effet sur
 la qualité des recommandations. Les favoris/rappels restent à implémenter.
