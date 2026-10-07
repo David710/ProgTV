@@ -1,80 +1,10 @@
-/* filepath: /home/david/ml/progtv2/app_progTV/static/style.css */
-body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-h1 {
-    color: #333;
-}
-
-#programs {
-    width: 80%;
-    margin: 20px 0;
-}
-
-.program {
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.program p {
-    margin: 5px 0;
-}
-
-.program img {
-    max-width: 100px;
-    height: auto;
-    display: block;
-    margin-top: 10px;
-}
-
-.card {
-    width: 30rem;
-}
-
-#page-title {
-    text-align: center;
-    margin-top: 20px;
-    margin-bottom: 50px;
-}
-
-#program-container {
-    display:contents;
-}
-
-.card-text {
-    text-align: justify;
-}
-
-.channel-icon {
-    max-width: 50px !important;
-    height: auto;
-    margin-bottom: 0px;
-    padding-left: 0px !important;
-    padding-right: 0px !important;
-    padding-bottom: 0px !important;
-    flex: none !important;
-}
-
-.card-body {
-    padding-top: 0px !important;
-}
-
-.info-add {
-    margin-bottom: auto;
-    text-align: center; 
-}
-
-.ai-comments {
-    text-align: justify;
-}
+body { font-family: Arial, sans-serif; background: #f4f4f4; }
+.navbar { width: 100%; }
+#program-container { max-width: 1400px; padding: 1rem; }
+#page-title { text-align: center; margin: 1rem 0 2rem; }
+.program-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
+.card { min-width: 0; }
+.card-img-top { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.channel-icon { max-width: 50px; max-height: 50px; object-fit: contain; }
+.card-text, .ai-comments { overflow-wrap: anywhere; }
+#status { text-align: center; }

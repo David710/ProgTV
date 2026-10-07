@@ -1,209 +1,121 @@
-function formatAsPercentage(decimal) {
-    return (decimal * 100).toFixed(0) + '%';
+const programsDiv = document.getElementById('programs');
+const pageTitle = document.getElementById('page-title');
+const statusDiv = document.getElementById('status');
+let activeRequest;
+
+function element(tag, className, text) {
+    const node = document.createElement(tag);
+    node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
 }
 
+function safeImage(url, alt, className) {
+    const img = element('img', className);
+    img.alt = alt;
+    img.loading = 'lazy';
+    try {
+        const parsed = new URL(url);
+        if (['https:', 'http:'].includes(parsed.protocol)) img.src = parsed.href;
+    } catch (_) { /* Une URL absente ne doit pas casser la carte. */ }
+    img.addEventListener('error', () => { img.hidden = true; });
+    return img;
+}
 
 function formatDuration(minutes) {
-    if (minutes >= 60) {
-        let hours = Math.floor(minutes / 60);
-        let remainingMinutes = Math.round(minutes % 60);
-        if (remainingMinutes === 60) { // handle rounding rollover
-            hours += 1;
-            remainingMinutes = 0;
-        }
-        return `${hours}h ${remainingMinutes}min`;
-    } else {
-        const rounded = Math.round(minutes);
-        return `${rounded}min`;
+    if (!Number.isFinite(minutes) || minutes < 0) return 'Durée inconnue';
+    const total = Math.round(minutes);
+    return total >= 60 ? `${Math.floor(total / 60)}h ${total % 60}min` : `${total}min`;
+}
+
+function renderProgram(program, suggestions) {
+    const card = element('article', 'card p-2');
+    card.append(safeImage(program.icon, program.name || 'Programme', 'card-img-top'));
+    const body = element('div', 'card-body');
+    const header = element('div', 'd-flex align-items-center gap-2 mb-3');
+    header.append(safeImage(program.channel_icon, program.channel_name || 'Chaîne', 'channel-icon'));
+    const date = new Date(program.start);
+    const time = Number.isNaN(date.getTime()) ? 'Horaire inconnu' : new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit',
+        ...(suggestions ? { weekday: 'long' } : {})
+    }).format(date);
+    header.append(element('span', 'badge text-bg-light', time));
+    body.append(header, element('h2', 'h5 card-title', program.name),
+        element('p', 'text-muted', program.channel_name),
+        element('p', 'card-text', program.desc || 'Résumé indisponible.'));
+    const details = element('div', 'd-flex flex-wrap gap-2 mb-3');
+    const score = Number.isFinite(program.note_pred) ? `Affinité : ${program.note_pred.toFixed(2)}` : 'Affinité indisponible';
+    for (const label of [program.rating, program.cat, score, formatDuration(program.duration)]) {
+        if (label) details.append(element('span', 'badge text-bg-secondary', label));
+    }
+    body.append(details);
+    if (suggestions) {
+        const button = element('button', 'btn btn-outline-primary', 'Pourquoi je vais aimer ?');
+        button.type = 'button';
+        const comment = element('p', 'ai-comments mt-3');
+        comment.hidden = true;
+        let loaded = false;
+        button.addEventListener('click', async () => {
+            if (loaded) {
+                comment.hidden = !comment.hidden;
+                button.textContent = comment.hidden ? 'Pourquoi je vais aimer ?' : 'Cacher le commentaire';
+                return;
+            }
+            button.disabled = true;
+            comment.hidden = false;
+            comment.textContent = 'Préparation de l’explication…';
+            try {
+                const response = await fetch(`/api/programs/${encodeURIComponent(program.id)}/comment`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Explication indisponible.');
+                comment.textContent = data.comment;
+                loaded = true;
+                button.textContent = 'Cacher le commentaire';
+            } catch (error) {
+                comment.textContent = error.message;
+            } finally {
+                button.disabled = false;
+            }
+        });
+        body.append(button, comment);
+    }
+    card.append(body);
+    return card;
+}
+
+async function loadPrograms(suggestions = false) {
+    if (activeRequest) activeRequest.abort();
+    const controller = new AbortController();
+    activeRequest = controller;
+    const date = new Intl.DateTimeFormat('fr-FR', {
+        timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long'
+    }).format(new Date());
+    pageTitle.textContent = `${suggestions ? 'Suggestions' : 'Ce soir'} — ${date}`;
+    programsDiv.replaceChildren();
+    programsDiv.setAttribute('aria-busy', 'true');
+    statusDiv.textContent = 'Chargement des programmes…';
+    document.getElementById('prog-day-link').classList.toggle('active', !suggestions);
+    document.getElementById('suggestions-link').classList.toggle('active', suggestions);
+    try {
+        const response = await fetch(suggestions ? '/api/suggestions' : '/api/programs', { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger les programmes.');
+        statusDiv.textContent = response.headers.get('X-Programs-Stale') === 'true'
+            ? `Dernières données disponibles : ${response.headers.get('X-Programs-Date')}.`
+            : '';
+        if (!data.length) statusDiv.textContent += ' Aucun programme disponible pour cette sélection.';
+        programsDiv.replaceChildren(...data.map(program => renderProgram(program, suggestions)));
+    } catch (error) {
+        if (error.name !== 'AbortError') statusDiv.textContent = error.message;
+    } finally {
+        if (activeRequest === controller) programsDiv.setAttribute('aria-busy', 'false');
     }
 }
 
-function getPrograms() {
-    // Fetch the JSON data from the Flask endpoint
-    fetch('/api/programs')
-        .then(response => response.json())
-        .then(data => {
-            // Process the JSON data
-            console.log(data);
-            // Update the page title with the current day and month
-            const pageTitle = document.getElementById('page-title');
-            pageTitle.innerHTML = `Programmes du ${formattedDate}`;
-            const programsDiv = document.getElementById('programs');
-            programsDiv.innerHTML = ''; // Clear existing content
-            let iRow = 0;
-            let programGroup;
-            data.forEach(program => {
-                if (iRow % 3 === 0) {
-                    programGroup = document.createElement('div');
-                    programGroup.classList.add("row", "mb-3");
-                    programsDiv.appendChild(programGroup);
-                }
-                const programElement = document.createElement('div');
-                programElement.classList.add("card", "p-2", "col-md", "me-3");
-
-                // Subtract one hour from program.start
-                const startTime = new Date(program.start);
-                startTime.setHours(startTime.getHours() - 1);
-                const formattedStartTime = startTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-
-                // Format note_pred as a percentage
-                const formattedNotePred = formatAsPercentage(program.note_pred);
-
-                // Format duration
-                const formattedDuration = formatDuration(program.duration);
-
-                programElement.innerHTML = `
-                    <img src="${program.icon}" alt="Program Image" class="card-img-top">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-start align-items-center flex-row mb-3">
-                            <img src="${program.channel_icon}" alt="Channel Icon" class="channel-icon p-2">
-                            <p class="card-title p-2"><span class="badge text-bg-light">${formattedStartTime}</span></p>
-                            <h5 class="card-title p-2">${program.name}</h5>
-                        </div>
-                        <p class="card-text">${program.desc}</p>
-                        <div class="d-flex justify-content-start align-items-center flex-row mb-3">
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-primary">${program.rating}</span></p>
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-secondary">${program.cat}</span></p>
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-danger">${formattedNotePred}</span></p>
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-light">${formattedDuration}</span></p>
-                        </div>
-                    </div>
-                `;
-                programGroup.appendChild(programElement);
-                iRow++;
-            });
-
-            // Add event listeners to the love-link elements
-            document.querySelectorAll('.love-link').forEach(link => {
-                link.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    const aiCommentsDiv = this.nextElementSibling;
-                    if (aiCommentsDiv.style.display === 'none') {
-                        aiCommentsDiv.style.display = 'block';
-                        this.textContent = 'Cacher le commentaire';
-                    } else {
-                        aiCommentsDiv.style.display = 'none';
-                        this.textContent = 'Pourquoi je vais aimer ?';
-                    }
-                });
-            });
-        })
-        .catch(error => console.error('Error fetching data:', error));
-} //end get_programs
-
-// Call the get_programs function on page load
-getPrograms();
-
-// Get the current date
-const currentDate = new Date();
-const options = { weekday: 'long', day: 'numeric', month: 'long' };
-const formattedDate = currentDate.toLocaleDateString('fr-FR', options);
-
-// Add event listener to the #prog-day-link link
-document.getElementById('prog-day-link').addEventListener('click', function(event) {
-    event.preventDefault(); // Prevent the default link behavior
-    getPrograms(); // Call the getPrograms function
-});
-
-// Add event listener to the #suggestions-link link
-document.getElementById('suggestions-link').addEventListener('click', function(event) {
-    event.preventDefault(); // Prevent the default link behavior
-    getSuggestions(); // Call the getSuggestions function
-    getAiComments(); // Call the getAiComments function
-});
-
-function getSuggestions() {
-    // Fetch the JSON data from the Flask endpoint
-    fetch('/api/suggestions')
-        .then(response => response.json())
-        .then(data => {
-            // Process the JSON data
-            console.log(data);
-            const pageTitle = document.getElementById('page-title');
-            pageTitle.innerHTML = `Suggestion du ${formattedDate}`;
-            const programsDiv = document.getElementById('programs');
-            programsDiv.innerHTML = ''; // Clear existing content
-            let iRow = 0;
-            let programGroup;
-            data.forEach(program => {
-                if (iRow % 3 === 0) {
-                    programGroup = document.createElement('div');
-                    programGroup.classList.add("row", "mb-3");
-                    programsDiv.appendChild(programGroup);
-                }
-                const programElement = document.createElement('div');
-                programElement.classList.add("card", "p-2", "col-md", "me-3");
-
-                // Subtract one hour from program.start
-                const startTime = new Date(program.start);
-                startTime.setHours(startTime.getHours() - 1);
-                const dayName = startTime.toLocaleDateString('fr-FR', { weekday: 'long' });
-                const formattedStartTime = startTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                const formattedStart = `${dayName} ${formattedStartTime}`;
-
-                // Format note_pred as a percentage
-                const formattedNotePred = formatAsPercentage(program.note_pred);
-
-                // Format duration
-                const formattedDuration = formatDuration(program.duration);
-
-                programElement.innerHTML = `
-                    <img src="${program.icon}" alt="Program Image" class="card-img-top">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-start align-items-center flex-row mb-3">
-                            <img src="${program.channel_icon}" alt="Channel Icon" class="channel-icon p-2">
-                            <p class="card-title p-2"><span class="badge text-bg-light">${formattedStart}</span></p>
-                            <h5 class="card-title p-2">${program.name}</h5>
-                        </div>
-                        <p class="card-text">${program.desc}</p>
-                        <div class="d-flex justify-content-start align-items-center flex-row mb-3">
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-primary">${program.rating}</span></p>
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-secondary">${program.cat}</span></p>
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-danger">${formattedNotePred}</span></p>
-                            <p class="card-text p-2 info-add"><span class="badge text-bg-light">${formattedDuration}</span></p>
-                        </div>
-                        <div id="${program.name}">
-                            <a href="#" class="btn btn-link love-link">Pourquoi je vais aimer ?</a>
-                            <div class="ai-comments" style="display: none;"></div>
-                        </div>
-                    </div>
-                `;
-                programGroup.appendChild(programElement);
-                iRow++;
-            });
-
-            // Add event listeners to the love-link elements
-            document.querySelectorAll('.love-link').forEach(link => {
-                link.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    const aiCommentsDiv = this.nextElementSibling;
-                    if (aiCommentsDiv.style.display === 'none') {
-                        aiCommentsDiv.style.display = 'block';
-                        this.textContent = 'Cacher le commentaire';
-                    } else {
-                        aiCommentsDiv.style.display = 'none';
-                        this.textContent = 'Pourquoi je vais aimer ?';
-                    }
-                });
-            });
-        })
-        .catch(error => console.error('Error fetching data:', error));
-} //end get_suggestions
-
-function getAiComments() {
-    // Fetch the JSON data from the Flask endpoint
-    fetch('/api/ai_comments')
-        .then(response => response.json())
-        .then(data => {
-            // Process the JSON data
-            console.log(data);
-            data.forEach(program => {
-                const aiCommentsDiv = document.getElementById(`${program.name}`).querySelector('.ai-comments');
-                aiCommentsDiv.innerHTML = `${program['ollama_comment']}`;
-            });
-        })
-        .catch(error => console.error('Error fetching data:', error));
-} //end getAiComments
-
-
-
+for (const [id, suggestions] of [['prog-day-link', false], ['suggestions-link', true]]) {
+    document.getElementById(id).addEventListener('click', event => {
+        event.preventDefault();
+        loadPrograms(suggestions);
+    });
+}
+loadPrograms();

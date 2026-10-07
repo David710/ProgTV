@@ -1,0 +1,9 @@
+Flask>=3.0,<4
+pandas>=2.2,<3
+numpy>=1.26,<3
+requests>=2.31,<3
+scikit-learn>=1.4,<2
+torch>=2.2,<3
+transformers>=4.40,<5
+sentencepiece>=0.2,<1
+ollama>=0.4,<1
