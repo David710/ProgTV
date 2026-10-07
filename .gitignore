@@ -178,3 +178,6 @@ cython_debug/
 
 # Ignorer le dossier program_download
 program_download/
+
+# Modèle généré au premier lancement (conserver les poids historiques)
+app_progTV/train/trained_model_v2.pth

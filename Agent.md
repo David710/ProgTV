@@ -79,16 +79,48 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Limite : préparation réelle non exécutée, faute de modèle réentraîné et de
     jeu annoté. Le script n'installe pas automatiquement les dépendances.
 
+- 2026-10-07 : correction du premier démarrage sans prétraitement historique.
+  - Le jeu annoté est désormais présent sur disque à la racine : 164 lignes,
+    embeddings CamemBERT (768 dimensions), notes de 0 à 16.
+  - Entraînement automatique si les artefacts compatibles sont absents ;
+    sauvegarde dans trained_model_v2.pth et son prétraitement, sans écraser
+    trained_model.pth/trained_model_old.pth ; réutilisation aux lancements suivants.
+  - Recherche du jeu dans train puis à la racine, chemin absolu accepté,
+    validation des entrées numériques et graine d'entraînement fixée.
+  - Sortie du lanceur non tamponnée pour suivre la préparation en direct.
+  - Entraînement réel effectué : 164 programmes, MSE de test 2,4592 ; modèle
+    compatible sauvegardé et relu. Artefacts générés ignorés par Git.
+  - Descriptions absentes/numériques converties en texte avant tokenisation ;
+    cache des résumés identiques et limitation des threads CPU dans la CLI.
+  - Validation : 23 tests Python et 4 tests JavaScript réussis ; Bash/Python et
+    `git diff --check` valides. Bootstrap testé : entraînement une seule fois,
+    poids historiques inchangés, chemins et descriptions atypiques.
+  - Mise à jour réelle du 2026-10-07 réussie via `./run.sh --update-only` après
+    une première expiration du délai de réponse de la source. Page et API
+    vérifiées avec le client Flask : HTTP 200, données fraîches, 19 programmes
+    maintenant, 19 ce soir, 572 demain et 5 suggestions.
+  - Le jeu initial est limité à une chaîne ; cette MSE ne valide pas encore
+    la qualité du classement multi-chaînes.
+
 ## Prochaine étape
 Ajouter les préférences et les retours utilisateur, puis mesurer leur effet sur
 la qualité des recommandations. Les favoris/rappels restent à implémenter.
 
 ## Limites du premier lot
-- Aucun réentraînement réel effectué : jeu annoté absent du disque. Les poids
-  historiques sont conservés. Test d'entraînement effectué sur données synthétiques.
-- Source distante, téléchargement CamemBERT et génération Ollama réels non testés.
+- Limitation initiale résolue : jeu annoté désormais présent, modèle v2 entraîné
+  sur les données réelles ; poids historiques conservés.
+- Source distante et génération CamemBERT désormais vérifiées sur les données
+  réelles. Génération Ollama réelle toujours non testée.
 - Vérification navigateur visuelle non effectuée ; JavaScript vérifié syntaxiquement.
 - Cache des commentaires local au processus, non persistant ; profil de goûts
   encore écrit en dur. La source du classement historique n'est pas migrée.
 - Planification quotidienne documentée, pas installée sur le système.
 - Fichiers modèle/prétraitement séparés : garder les deux artefacts ensemble.
+
+# ne pas faire
+- modifier ou supprimer des dossiers à l'exterieur du dossier de travail ProgTV
+
+# bonnes pratiques
+- utiliser conda comme gestionnaire d'environnement
+- utiliser PEP8
+- utiliser tailwind css

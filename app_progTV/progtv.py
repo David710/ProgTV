@@ -8,6 +8,7 @@ import hashlib
 import pickle
 import argparse
 import unicodedata
+from functools import lru_cache
 import torch
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -126,8 +127,11 @@ class TVProgram():
         else:
             raise ValueError(f"Type d’embedding inconnu : {model_name}")
 
+        generate_embeddings = lru_cache(maxsize=8192)(generate_embeddings)
+
         def flow_through_programs(program):
-            program[f'embeddings_{model_name}'] = program["desc"].apply(generate_embeddings)
+            print(f"Calcul des embeddings : {len(program)} programmes…", flush=True)
+            program[f'embeddings_{model_name}'] = program["desc"].fillna("").astype(str).apply(generate_embeddings)
             return program
         
         # Appliquer la fonction à la colonne "desc"
@@ -135,13 +139,39 @@ class TVProgram():
         df.to_pickle(file_name)
         return df
     
+    def training_file(self, file_name="df_programs_tf1_note.pkl"):
+        path = Path(file_name)
+        if path.is_absolute():
+            candidates = [path]
+        else:
+            candidates = [self.train_folder / path, Path(__file__).resolve().parents[1] / path]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        raise FileNotFoundError(
+            f"Jeu annoté introuvable : {file_name}. Placez-le dans le dossier train ou à la racine de ProgTV."
+        )
+
+    def ensure_model(self):
+        """Préparer un modèle compatible au premier lancement sans écraser l'historique."""
+        model_path = self.train_folder / "trained_model_v2.pth"
+        if not model_path.is_file() or not model_path.with_suffix(".preprocessing.pkl").is_file():
+            print("Premier lancement : entraînement du modèle compatible à partir du jeu annoté…")
+            self.train_model("df_programs_tf1_note.pkl")
+        return self.load_model(model_path, self.input_dim)
+
     def train_model(self, file_name):
-        # Préparer les données
-        df = pd.read_pickle(self.train_folder / file_name)
+        df = pd.read_pickle(self.training_file(file_name))
+        required = {"cat", "rating", "embeddings", "note"}
+        if not required.issubset(df.columns) or len(df) < 5:
+            raise ValueError("Jeu annoté invalide : au moins 5 lignes et colonnes cat, rating, embeddings, note requises.")
 
         # Les mappings et le normaliseur sont appris uniquement sur le train.
         X = np.vstack(df["embeddings"])
-        y = df['note'].values
+        y = pd.to_numeric(df['note'], errors="raise").to_numpy(dtype=float)
+        if X.ndim != 2 or X.shape[0] != len(df) or not np.isfinite(X).all() or not np.isfinite(y).all():
+            raise ValueError("Jeu annoté invalide : embeddings et notes numériques finis requis.")
+        torch.manual_seed(42)
 
         # Diviser les données en ensembles d'entraînement et de test
         train_idx, test_idx = train_test_split(np.arange(len(df)), test_size=0.2, random_state=42)
@@ -197,7 +227,7 @@ class TVProgram():
         print(f"Test MSE: {test_mse:.4f}")
 
         # Sauvegarder le modèle et son prétraitement
-        model_file_path = f"{self.train_folder}/trained_model.pth"
+        model_file_path = self.train_folder / "trained_model_v2.pth"
         self.save_model(model, model_file_path)
         return model
 
@@ -372,12 +402,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Préparer les programmes et leur classement")
     parser.add_argument("--train", metavar="FILE", help="Jeu annoté situé dans le dossier train")
     args = parser.parse_args()
+    # Éviter la surallocation de threads sur les machines à nombreux cœurs.
+    torch.set_num_threads(min(4, torch.get_num_threads()))
     tv_program = TVProgram()
     if args.train:
         tv_program.train_model(args.train)
     else:
         # Valider le modèle avant de télécharger et de calculer les embeddings.
-        model = tv_program.load_model(tv_program.train_folder / "trained_model.pth", tv_program.input_dim)
+        model = tv_program.ensure_model()
         progs = tv_program.get_programs(tv_program.downloading_url)
         if progs is None:
             raise SystemExit("Téléchargement impossible ; les derniers programmes sont conservés.")

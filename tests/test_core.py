@@ -5,6 +5,8 @@ from datetime import datetime, date
 from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app_progTV'))
 import pandas as pd
@@ -82,11 +84,48 @@ class ProgramsTests(unittest.TestCase):
             }).to_pickle(Path(folder) / 'training.pkl')
             with patch('builtins.print'):
                 model = self.tv.train_model('training.pkl')
-                restored = TVProgram().load_model(Path(folder) / 'trained_model.pth', 770)
+                restored = TVProgram().load_model(Path(folder) / 'trained_model_v2.pth', 770)
             self.assertEqual(restored.fc1.in_features, 3)
             model.eval()
             with torch.no_grad():
                 np.testing.assert_allclose(model(torch.zeros(1, 3)).numpy(), restored(torch.zeros(1, 3)).numpy())
+
+    def test_first_launch_trains_once_and_preserves_legacy_weights(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.tv.train_folder = Path(folder)
+            legacy = Path(folder) / 'trained_model.pth'
+            legacy.write_bytes(b'historical weights')
+            pd.DataFrame({
+                'cat': ['Film'] * 10, 'rating': ['Tout public'] * 10,
+                'embeddings': [np.array([i / 10]) for i in range(10)],
+                'note': [i / 10 for i in range(10)]
+            }).to_pickle(Path(folder) / 'df_programs_tf1_note.pkl')
+            with patch('builtins.print'), patch.object(self.tv, 'train_model', wraps=self.tv.train_model) as train:
+                model = self.tv.ensure_model()
+                self.tv.ensure_model()
+                train.assert_called_once()
+            self.assertEqual(model.fc1.in_features, 3)
+            self.assertEqual(legacy.read_bytes(), b'historical weights')
+
+    def test_embeddings_accept_missing_or_numeric_descriptions(self):
+        tokenizer = Mock(return_value={"attention_mask": torch.ones(1, 1, dtype=torch.long)})
+        model = Mock(return_value=SimpleNamespace(last_hidden_state=torch.zeros(1, 1, 768)))
+        transformers = SimpleNamespace(
+            CamembertTokenizer=SimpleNamespace(from_pretrained=Mock(return_value=tokenizer)),
+            CamembertModel=SimpleNamespace(from_pretrained=Mock(return_value=model)))
+        data = pd.DataFrame([dict(programs=pd.DataFrame({'desc': [None, np.nan, 12]}))])
+        with tempfile.TemporaryDirectory() as folder, patch.dict(sys.modules, {'transformers': transformers}):
+            results = self.tv.generate_embeddings(data, 'camembert', Path(folder) / 'programs.pkl')
+        self.assertEqual([call.args[0] for call in tokenizer.call_args_list], ['', '', '12.0'])
+        self.assertEqual(len(results.iloc[0]['programs']['embeddings_camembert']), 3)
+
+    def test_training_file_can_be_absolute_and_errors_are_clear(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'training.pkl'
+            source.write_bytes(b'placeholder')
+            self.assertEqual(self.tv.training_file(source), source)
+            with self.assertRaisesRegex(FileNotFoundError, 'Jeu annoté introuvable'):
+                self.tv.training_file(Path(folder) / 'missing.pkl')
 
     def test_empty_programs_are_supported(self):
         data = pd.DataFrame([{'name': 'TF1', 'programs': pd.DataFrame()}])
