@@ -1,12 +1,13 @@
 # import libraries
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import hashlib
 import pickle
 import argparse
+import unicodedata
 import torch
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -283,16 +284,69 @@ class TVProgram():
         candidates = programs[(programs["start"] <= target) & (programs["end"] > target)]
         return candidates.sort_values("start", ascending=False).drop_duplicates("channel_name")
 
+    @staticmethod
+    def search_text(value):
+        text = unicodedata.normalize("NFKD", str(value or "").casefold())
+        return "".join(char for char in text if not unicodedata.combining(char))
+
+    def select_programs(self, rated_progs, view="tonight", now=None, query="",
+                        channel="", category="", max_duration=None, limit=5):
+        """Retourner les résultats filtrés et les choix disponibles dans cette vue."""
+        if view not in {"now", "tonight", "tomorrow", "suggestions"}:
+            raise ValueError("Vue inconnue.")
+        now = pd.Timestamp(now or datetime.now(ZoneInfo("Europe/Paris")))
+        if now.tzinfo is None:
+            raise ValueError("L'heure de référence doit contenir un fuseau.")
+        now = now.tz_convert("Europe/Paris")
+        programs = self.flatten_programs(rated_progs)
+        selected_date = now.date()
+        if view == "now":
+            programs = programs[(programs["start"] <= now) & (programs["end"] > now)]
+        elif view == "tonight":
+            target = pd.Timestamp(f"{selected_date} 21:00", tz="Europe/Paris")
+            programs = programs[(programs["start"] <= target) & (programs["end"] > target)]
+            programs = programs.sort_values(["start", "id"], ascending=[False, True]).drop_duplicates("channel_name")
+        elif view == "tomorrow":
+            selected_date += timedelta(days=1)
+            start = pd.Timestamp(selected_date, tz="Europe/Paris")
+            end = pd.Timestamp(selected_date + timedelta(days=1), tz="Europe/Paris")
+            programs = programs[(programs["start"] >= start) & (programs["start"] < end)]
+        else:
+            programs = programs[programs["start"] > now]
+        # Les choix restent disponibles même lorsque les filtres ne donnent rien.
+        choices = {
+            key: sorted(programs[column].dropna().astype(str).loc[lambda values: values != ""].unique())
+            if column in programs else []
+            for key, column in (("channels", "channel_name"), ("categories", "cat"))
+        }
+        if channel:
+            programs = programs[programs["channel_name"] == channel]
+        if category:
+            programs = programs[programs.get("cat", pd.Series("", index=programs.index)) == category]
+        if max_duration is not None:
+            programs = programs[(programs["duration"] >= 0) & (programs["duration"] <= max_duration)]
+        query = self.search_text(query.strip())
+        if query:
+            searchable = pd.Series("", index=programs.index)
+            for column in ("name", "desc", "channel_name", "cat"):
+                if column in programs:
+                    searchable += " " + programs[column].fillna("").astype(str)
+            programs = programs[searchable.map(self.search_text).str.contains(query, regex=False)]
+        if view == "suggestions":
+            programs = programs.sort_values(["note_pred", "start", "id"], ascending=[False, True, True])
+            programs = programs.drop_duplicates("id").head(max(0, limit))
+        else:
+            programs = programs.sort_values(["start", "channel_name", "id"]).drop_duplicates("id")
+        return programs, choices, selected_date
+
     def get_best_programs(self, rated_progs, n=5, whitelist=None, now=None):
-        if n <= 0:
-            return self.flatten_programs(rated_progs).iloc[:0]
         programs = self.flatten_programs(rated_progs)
         now = now or datetime.now(ZoneInfo("Europe/Paris"))
         programs = programs[programs["start"] > now]
         if whitelist:
             programs = programs[programs["channel_name"].isin(whitelist)]
         programs = programs.sort_values(["note_pred", "start", "id"], ascending=[False, True, True])
-        return programs.drop_duplicates("id").head(n)
+        return programs.drop_duplicates("id").head(max(0, n))
 
     def get_ollama_comment(self, program_desc):
         import ollama

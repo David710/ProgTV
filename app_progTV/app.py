@@ -3,8 +3,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 import math
 import logging
+import json
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 import pandas as pd
 import progtv
 
@@ -49,12 +50,28 @@ def serialize(frame):
 
 
 def response_for(suggestions=False):
+    view = 'suggestions' if suggestions else request.args.get('view', 'tonight')
+    if view not in {'now', 'tonight', 'tomorrow', 'suggestions'}:
+        return jsonify(error='Vue inconnue.'), 400
+    duration = request.args.get('max_duration', '').strip()
+    try:
+        max_duration = int(duration) if duration else None
+        if max_duration is not None and not 1 <= max_duration <= 1440:
+            raise ValueError()
+    except ValueError:
+        return jsonify(error='La durée maximale doit être comprise entre 1 et 1440 minutes.'), 400
     tv, data, data_date = load_programs()
     if data is None:
         return jsonify(error='Aucun programme disponible. Lancez la préparation des données.'), 503
-    frame = tv.get_best_programs(data, n=5) if suggestions else tv.get_prime_programs(data)
+    frame, choices, selected_date = tv.select_programs(
+        data, view=view, query=request.args.get('q', ''),
+        channel=request.args.get('channel', ''), category=request.args.get('category', ''),
+        max_duration=max_duration,
+    )
     response = jsonify(serialize(frame))
     response.headers['X-Programs-Date'] = data_date
+    response.headers['X-Programs-View-Date'] = selected_date.isoformat()
+    response.headers['X-Programs-Filters'] = json.dumps(choices, ensure_ascii=True)
     response.headers['X-Programs-Stale'] = str(data_date != datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()).lower()
     return response
 

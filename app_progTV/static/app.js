@@ -83,39 +83,130 @@ function renderProgram(program, suggestions) {
     return card;
 }
 
-async function loadPrograms(suggestions = false) {
+const views = { now: 'Maintenant', tonight: 'Ce soir', tomorrow: 'Demain', suggestions: 'Suggestions' };
+const initialParams = new URLSearchParams(window.location.search);
+let currentView = Object.hasOwn(views, initialParams.get('view')) ? initialParams.get('view') : 'tonight';
+const searchInput = document.getElementById('search');
+const channelSelect = document.getElementById('channel');
+const categorySelect = document.getElementById('category');
+const durationInput = document.getElementById('max-duration');
+const filtersForm = document.getElementById('filters');
+let searchTimer;
+
+function updateChoices(select, values, selected, allLabel) {
+    const options = [element('option', '', allLabel)];
+    options[0].value = '';
+    const choices = [...values];
+    if (selected && !choices.includes(selected)) choices.push(selected);
+    for (const value of choices) {
+        const option = element('option', '', value);
+        option.value = value;
+        options.push(option);
+    }
+    select.replaceChildren(...options);
+    select.value = selected;
+}
+
+searchInput.value = initialParams.get('q') || '';
+durationInput.value = initialParams.get('max_duration') || '';
+updateChoices(channelSelect, [], initialParams.get('channel') || '', 'Toutes les chaînes');
+updateChoices(categorySelect, [], initialParams.get('category') || '', 'Toutes les catégories');
+
+function filterParams() {
+    const params = new URLSearchParams({ view: currentView });
+    for (const [key, input] of [['q', searchInput], ['channel', channelSelect],
+        ['category', categorySelect], ['max_duration', durationInput]]) {
+        if (input.value.trim()) params.set(key, input.value.trim());
+    }
+    return params;
+}
+
+function updateNavigation() {
+    for (const button of document.querySelectorAll('[data-view]')) {
+        const selected = button.dataset.view === currentView;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+    }
+}
+
+async function loadPrograms() {
     if (activeRequest) activeRequest.abort();
+    if (!filtersForm.reportValidity()) {
+        programsDiv.setAttribute('aria-busy', 'false');
+        statusDiv.textContent = 'Vérifiez les filtres saisis.';
+        return;
+    }
     const controller = new AbortController();
     activeRequest = controller;
-    const date = new Intl.DateTimeFormat('fr-FR', {
-        timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long'
-    }).format(new Date());
-    pageTitle.textContent = `${suggestions ? 'Suggestions' : 'Ce soir'} — ${date}`;
+    const params = filterParams();
+    const requestedView = currentView;
+    window.history.replaceState(null, '', `${window.location.pathname}?${params}`);
+    updateNavigation();
+    pageTitle.textContent = views[requestedView];
     programsDiv.replaceChildren();
     programsDiv.setAttribute('aria-busy', 'true');
     statusDiv.textContent = 'Chargement des programmes…';
-    document.getElementById('prog-day-link').classList.toggle('active', !suggestions);
-    document.getElementById('suggestions-link').classList.toggle('active', suggestions);
     try {
-        const response = await fetch(suggestions ? '/api/suggestions' : '/api/programs', { signal: controller.signal });
+        const endpoint = requestedView === 'suggestions' ? '/api/suggestions' : '/api/programs';
+        const response = await fetch(`${endpoint}?${params}`, { signal: controller.signal });
         const data = await response.json();
+        if (controller.signal.aborted || activeRequest !== controller) return;
         if (!response.ok) throw new Error(data.error || 'Impossible de charger les programmes.');
-        statusDiv.textContent = response.headers.get('X-Programs-Stale') === 'true'
-            ? `Dernières données disponibles : ${response.headers.get('X-Programs-Date')}.`
-            : '';
-        if (!data.length) statusDiv.textContent += ' Aucun programme disponible pour cette sélection.';
-        programsDiv.replaceChildren(...data.map(program => renderProgram(program, suggestions)));
+        const selectedDate = response.headers.get('X-Programs-View-Date');
+        if (selectedDate) {
+            const date = new Intl.DateTimeFormat('fr-FR', {
+                timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long'
+            }).format(new Date(`${selectedDate}T12:00:00+00:00`));
+            pageTitle.textContent = `${views[requestedView]} — ${date}`;
+        }
+        const choices = JSON.parse(response.headers.get('X-Programs-Filters') || '{"channels":[],"categories":[]}');
+        updateChoices(channelSelect, choices.channels, params.get('channel') || '', 'Toutes les chaînes');
+        updateChoices(categorySelect, choices.categories, params.get('category') || '', 'Toutes les catégories');
+        const messages = [];
+        if (response.headers.get('X-Programs-Stale') === 'true') {
+            messages.push(`Dernières données disponibles : ${response.headers.get('X-Programs-Date')}.`);
+        }
+        if (data.length) {
+            messages.push(`${data.length} programme${data.length > 1 ? 's' : ''}.`);
+        } else if (['q', 'channel', 'category', 'max_duration'].some(key => params.has(key))) {
+            messages.push('Aucun programme ne correspond à ces filtres. Vous pouvez les réinitialiser.');
+        } else {
+            messages.push(requestedView === 'tomorrow'
+                ? 'Aucun programme disponible pour demain dans les données actuelles.'
+                : 'Aucun programme disponible pour cette période.');
+        }
+        statusDiv.textContent = messages.join(' ');
+        programsDiv.replaceChildren(...data.map(program => renderProgram(program, requestedView === 'suggestions')));
     } catch (error) {
-        if (error.name !== 'AbortError') statusDiv.textContent = error.message;
+        if (!controller.signal.aborted && activeRequest === controller) statusDiv.textContent = error.message;
     } finally {
         if (activeRequest === controller) programsDiv.setAttribute('aria-busy', 'false');
     }
 }
 
-for (const [id, suggestions] of [['prog-day-link', false], ['suggestions-link', true]]) {
-    document.getElementById(id).addEventListener('click', event => {
-        event.preventDefault();
-        loadPrograms(suggestions);
+function reloadFilters(delay = 0) {
+    clearTimeout(searchTimer);
+    if (activeRequest) activeRequest.abort();
+    if (delay) searchTimer = setTimeout(loadPrograms, delay);
+    else loadPrograms();
+}
+
+for (const button of document.querySelectorAll('[data-view]')) {
+    button.addEventListener('click', () => {
+        currentView = button.dataset.view;
+        reloadFilters();
     });
 }
+searchInput.addEventListener('input', () => reloadFilters(250));
+for (const input of [channelSelect, categorySelect, durationInput]) {
+    input.addEventListener('change', () => reloadFilters());
+}
+filtersForm.addEventListener('submit', event => {
+    event.preventDefault();
+    reloadFilters();
+});
+document.getElementById('reset-filters').addEventListener('click', () => {
+    for (const input of [searchInput, channelSelect, categorySelect, durationInput]) input.value = '';
+    reloadFilters();
+});
 loadPrograms();

@@ -27,9 +27,6 @@ explications locales Ollama. Le dépôt de l'application est ce dossier.
 Tests ciblés : encodage et normalisation, changements d'heure, absence de données,
 suggestions sans doublons et nombre de résultats. Vérification syntaxique Python/JS.
 
-## Limitations connues
-Les poids historiques seuls ne contiennent pas les encodeurs et le normaliseur.
-Le modèle devra être réentraîné pour produire un artefact cohérent.
 - 2026-10-07 : premier lot de stabilisation implémenté.
   - Mappings appris sur le train et normaliseur sauvegardés/réutilisés ;
     catégories inconnues à -1 ; évaluation MSE sur le jeu de test.
@@ -49,9 +46,30 @@ Le modèle devra être réentraîné pour produire un artefact cohérent.
   - Validation : 11 tests unittest réussis dans un venv temporaire avec PyTorch
     CPU, syntaxe JavaScript et Python valide, `git diff --check` réussi.
 
+- 2026-10-07 : deuxième lot, navigation temporelle et filtres.
+  - Vues Maintenant (début inclus, fin exclue), Ce soir (21 h), Demain
+    (journée complète selon le calendrier Europe/Paris), Suggestions conservée.
+  - Recherche textuelle littérale sur titre/résumé/chaîne/catégorie, insensible
+    à la casse et aux accents ; filtres chaîne, catégorie et durée maximale.
+  - Filtrage avant le top 5 ; choix de filtres issus de la période non filtrée
+    pour pouvoir sortir d'une sélection vide ; tri chronologique hors suggestions.
+  - Sélection conservée entre vues et dans l'URL ; réinitialisation des filtres,
+    recherche temporisée et protection contre les réponses obsolètes.
+  - Navigation et formulaire accessibles au clavier, état sélectionné annoncé,
+    nombre de résultats et message explicite si demain n'est pas disponible.
+  - API compatible avec les listes JSON historiques, validation 400 des vues
+    et durées, métadonnées des filtres et de la date consultée dans les en-têtes.
+  - Validation : 20 tests Python et 4 tests JavaScript sur DOM simulé réussis ;
+    syntaxe Python/JS et `git diff --check` réussis. Cas couverts : bornes horaires,
+    journée du changement d'heure, filtres combinés avant classement, recherche
+    littérale/accents, restauration URL, réinitialisation, réponses obsolètes,
+    rendu textuel sûr et commentaires au clic.
+  - Limites : pas de vérification visuelle navigateur ni de données source réelles.
+    Les nouvelles vues ne créent pas les programmes absents du cache.
+
 ## Prochaine étape
-Ajouter les vues maintenant/demain puis la recherche et les filtres. Ensuite
-préférences et retours utilisateur, avec mesure de qualité des recommandations.
+Ajouter les préférences et les retours utilisateur, puis mesurer leur effet sur
+la qualité des recommandations. Les favoris/rappels restent à implémenter.
 
 ## Limites du premier lot
 - Aucun réentraînement réel effectué : jeu annoté absent du disque. Les poids

@@ -8,3 +8,7 @@ body { font-family: Arial, sans-serif; background: #f4f4f4; }
 .channel-icon { max-width: 50px; max-height: 50px; object-fit: contain; }
 .card-text, .ai-comments { overflow-wrap: anywhere; }
 #status { text-align: center; }
+
+.filters { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; align-items: end; gap: .75rem; }
+@media (max-width: 900px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .filters { grid-template-columns: minmax(0, 1fr); } }
