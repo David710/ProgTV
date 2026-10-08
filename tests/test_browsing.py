@@ -79,6 +79,52 @@ class BrowsingTests(unittest.TestCase):
         programs, _, _ = self.select(view='tonight', max_duration=90)
         self.assertEqual(programs['name'].tolist(), ['Polar'])
 
+    def test_prime_time_skips_access_and_short_weather_bulletins(self):
+        rows = []
+        schedules = {
+            'TF1': [('Ici tout commence', '20:30', 35),
+                    ('Météo', '21:05', 5), ('Film', '21:10', 110)],
+            'France 2': [('Access long', '20:30', 70), ('Soirée', '21:15', 90)],
+            'Arte': [('Film tôt', '20:55', 100)],
+            'M6': [('Access seul', '20:30', 35)],
+            'W9': [('Épisode 1', '21:00', 40), ('Épisode 2', '21:40', 40)],
+        }
+        for channel, schedule in schedules.items():
+            programs = []
+            for name, time, duration in schedule:
+                start = pd.Timestamp(f'2026-10-07T{time}+02:00')
+                programs.append(dict(name=name, start=start,
+                                     end=start + pd.Timedelta(minutes=duration),
+                                     note_pred=.5))
+            rows.append(dict(name=channel, programs=pd.DataFrame(programs)))
+        data = pd.DataFrame(rows)
+        result, _, _ = self.tv.select_programs(data, view='tonight', now=self.now)
+        self.assertEqual(result['name'].tolist(), ['Film', 'Soirée', 'Film tôt', 'Épisode 1'])
+        self.assertEqual(self.tv.get_prime_programs(data, self.now.date())['id'].tolist(),
+                         result['id'].tolist())
+        # Le filtrage ne doit pas faire remonter l’access à la place du prime.
+        result, _, _ = self.tv.select_programs(
+            data, view='tonight', now=self.now, channel='TF1', max_duration=60)
+        self.assertTrue(result.empty)
+
+    def test_prime_time_hour_and_duration_boundaries(self):
+        programs = []
+        cases = [('trop tôt', '20:29', 180, False),
+                 ('repli limite', '20:30', 60, True),
+                 ('repli court', '20:59', 59, False),
+                 ('épisode court', '21:00', 39, False),
+                 ('épisode limite', '21:00', 40, True),
+                 ('début limite', '21:30', 40, True),
+                 ('trop tard', '21:31', 120, False)]
+        for name, time, duration, _ in cases:
+            start = pd.Timestamp(f'2026-10-07T{time}+02:00')
+            programs.append(dict(name=name, programs=pd.DataFrame([
+                dict(name=name, start=start, end=start + pd.Timedelta(minutes=duration),
+                     note_pred=.5)])))
+        result, _, _ = self.tv.select_programs(
+            pd.DataFrame(programs), view='tonight', now=self.now)
+        self.assertEqual(set(result['name']), {name for name, _, _, valid in cases if valid})
+
     def test_channel_order_precedes_time_and_sorts_filter_choices(self):
         rows = []
         for channel in ['Chérie 25', 'Z locale', 'France 3', 'Arte',

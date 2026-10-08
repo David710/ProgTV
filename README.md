@@ -62,7 +62,12 @@ et indique sa date ; les programmes terminés ne sont pas recommandés.
 ## Parcourir les programmes
 
 - **Maintenant** : programmes commencés et pas encore terminés.
-- **Ce soir** : programme de chaque chaîne en cours à 21 h.
+- **Ce soir** : première émission de chaque chaîne commençant entre 21 h et
+  21 h 30 (bornes incluses), d’au moins 40 minutes. À défaut, première émission
+  entre 20 h 30 et 21 h (21 h exclue), d’au moins 60 minutes et se terminant
+  à 21 h 30 ou après. Horaires Europe/Paris. Cette estimation par horaires et
+  durée écarte l’access court et les bulletins ; une chaîne sans candidat est
+  omise. Les filtres s’appliquent après la sélection du prime time.
 - **Demain** : toutes les diffusions qui commencent le lendemain, entre minuit
   inclus et minuit suivant exclu, selon le calendrier Europe/Paris.
 - **Suggestions** : les cinq prochaines diffusions les mieux classées parmi

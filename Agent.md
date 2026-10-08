@@ -155,6 +155,18 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Limite : page programme-tv.net fournie inaccessible via l’outil web ;
     ordre éditorial appliqué selon la demande, sans copie exacte revendiquée.
 
+- 2026-10-08 : détection horaire du prime time dans Ce soir.
+  - Première émission par chaîne entre 21 h et 21 h 30 inclus, durée >=40 min.
+    Repli entre 20 h 30 et 21 h exclue, durée >=60 min et fin >=21 h 30.
+  - Sélection commune à get_prime_programs et Ce soir ; filtres ensuite,
+    ordre des chaînes conservé. Chaînes sans candidat omises.
+  - Validation : 45 tests Python et 10 tests JS réussis, git diff --check ;
+    access court, météo, épisodes, bornes et repli couverts. Cache réel lu
+    sans recalcul : 12 candidats sur le cache du 2026-10-08.
+  - Limite constatée : cache indiquant Demain nous appartient à 21 h 10 ;
+    possible décalage des horaires source à investiguer. Heuristique horaire
+    ne garantit pas le prime time éditorial lorsque les horaires sont erronés.
+
 ## Prochaine étape
 Ajouter les favoris et les rappels/export calendrier, puis évaluer le classement
 personnalisé sur des retours indépendants. Les profils nommés du foyer restent

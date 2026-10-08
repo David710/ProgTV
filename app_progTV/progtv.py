@@ -335,10 +335,33 @@ class TVProgram():
     def get_prime_programs(self, rated_progs, day=None):
         programs = self.flatten_programs(rated_progs)
         day = day or datetime.now(ZoneInfo("Europe/Paris")).date()
-        target = pd.Timestamp(f"{day} 21:00", tz="Europe/Paris")
-        # Inclure les émissions déjà commencées au moment du prime time.
-        candidates = programs[(programs["start"] <= target) & (programs["end"] > target)]
-        return candidates.sort_values("start", ascending=False).drop_duplicates("channel_name")
+        return self.select_prime_time(programs, day)
+
+    @staticmethod
+    def select_prime_time(programs, day):
+        """Estimer le prime time par heure de début et durée, par chaîne."""
+        early = pd.Timestamp(f'{day} 20:30', tz='Europe/Paris')
+        prime = pd.Timestamp(f'{day} 21:00', tz='Europe/Paris')
+        latest = pd.Timestamp(f'{day} 21:30', tz='Europe/Paris')
+        duration = programs['duration']
+        preferred = (
+            programs['start'].between(prime, latest) & (duration >= 40)
+        )
+        fallback = (
+            (programs['start'] >= early) & (programs['start'] < prime)
+            & (duration >= 60) & (programs['end'] >= latest)
+        )
+        candidates = programs[preferred | fallback].copy()
+        candidates['_prime_priority'] = preferred.loc[candidates.index].map(
+            {True: 0, False: 1}
+        )
+        candidates = candidates.sort_values(
+            ['_prime_priority', 'start', 'id']
+        ).drop_duplicates('channel_name')
+        candidates['_channel_order'] = candidates['channel_name'].map(channel_sort_key)
+        return candidates.sort_values('_channel_order').drop(
+            columns=['_prime_priority', '_channel_order']
+        )
 
     @staticmethod
     def search_text(value):
@@ -359,9 +382,7 @@ class TVProgram():
         if view == "now":
             programs = programs[(programs["start"] <= now) & (programs["end"] > now)]
         elif view == "tonight":
-            target = pd.Timestamp(f"{selected_date} 21:00", tz="Europe/Paris")
-            programs = programs[(programs["start"] <= target) & (programs["end"] > target)]
-            programs = programs.sort_values(["start", "id"], ascending=[False, True]).drop_duplicates("channel_name")
+            programs = self.select_prime_time(programs, selected_date)
         elif view == "tomorrow":
             selected_date += timedelta(days=1)
             start = pd.Timestamp(selected_date, tz="Europe/Paris")
