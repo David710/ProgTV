@@ -181,8 +181,14 @@ Les artefacts générés sont ignorés par Git. Garder les poids et le fichier d
 prétraitement ensemble. Les catégories inconnues utilisent la valeur -1.
 Les artefacts pickle doivent provenir d'une source de confiance.
 La note affichée est un score d'affinité brut, pas une probabilité.
-Les dates des anciens caches sans fuseau sont interprétées comme UTC, conformément
-à leur construction à partir des timestamps Unix.
+Les dates des anciens caches sans fuseau sont interprétées comme UTC.
+Une correction de **−2 heures** s’applique aux heures de début et de fin de
+la source TV avant l’affichage en Europe/Paris. Les caches existants sont corrigés
+à la lecture, sans recalcul des embeddings ni modification des fichiers.
+Les nouveaux caches portent un marqueur pour éviter une double correction.
+Les durées restent identiques ; la correction tient compte des changements de date.
+Cet ajustement fixe correspond au décalage constaté sur la source actuelle ;
+il devra être réévalué si les horaires fournis par l’API changent.
 
 ## Tests
 

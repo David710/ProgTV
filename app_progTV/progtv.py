@@ -17,6 +17,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+# Correction demandée pour les horaires actuellement fournis par la source TV.
+SOURCE_TIME_OFFSET = pd.Timedelta(hours=-2)
+TIME_CORRECTION_ATTRIBUTE = 'progtv_time_offset_seconds'
+
 # Ordre éditorial du guide : grandes chaînes nationales, puis TNT.
 CHANNEL_ORDER = (
     'TF1', 'France 2', 'France 3', 'Canal+', 'France 5', 'M6', 'Arte',
@@ -97,19 +101,48 @@ class TVProgram():
         try:
             # Charger le fichier Excel
             df = pd.read_pickle(file)
-            return df
+            return self.correct_cached_times(df)
         except FileNotFoundError:
             print(f"Le fichier {file} est introuvable.")
             return None
         
+    @staticmethod
+    def correct_cached_times(data):
+        """Corriger les caches historiques une seule fois, sans toucher aux scores."""
+        if data.attrs.get(TIME_CORRECTION_ATTRIBUTE) == -7200:
+            return data
+        data = data.copy()
+        if 'programs' not in data:
+            return data
+        for index, row in data.iterrows():
+            programs = row['programs']
+            # Un cache brut de l’API sera corrigé par format_programs.
+            if not isinstance(programs, pd.DataFrame):
+                continue
+            programs = programs.copy()
+            if programs.attrs.get(TIME_CORRECTION_ATTRIBUTE) != -7200:
+                for column in ('start', 'end'):
+                    if column in programs:
+                        programs[column] = (
+                            pd.to_datetime(programs[column], utc=True)
+                            + SOURCE_TIME_OFFSET
+                        ).dt.tz_convert('Europe/Paris')
+                programs.attrs[TIME_CORRECTION_ATTRIBUTE] = -7200
+            data.at[index, 'programs'] = programs
+        return data
+
     def format_programs(self, programs):
         """Formater les programmes TV
         - transformer la colonne 'programs' en DataFrame
         - Convertir les dates de début et de fin en datetime
         """
         df_programs = pd.DataFrame(programs)
-        df_programs.start = pd.to_datetime(df_programs.start, unit="s", utc=True).dt.tz_convert("Europe/Paris")
-        df_programs.end = pd.to_datetime(df_programs.end, unit="s", utc=True).dt.tz_convert("Europe/Paris")
+        for column in ('start', 'end'):
+            df_programs[column] = (
+                pd.to_datetime(df_programs[column], unit='s', utc=True)
+                + SOURCE_TIME_OFFSET
+            ).dt.tz_convert('Europe/Paris')
+        df_programs.attrs[TIME_CORRECTION_ATTRIBUTE] = -7200
         return df_programs
     
     def filter_programs(self, df, channels):
@@ -121,6 +154,7 @@ class TVProgram():
             # Filtrer les données
             filtered_df = df[df["name"].isin(channels)]
             filtered_df.loc[:, "programs"] = filtered_df["programs"].apply(self.format_programs)
+            filtered_df.attrs[TIME_CORRECTION_ATTRIBUTE] = -7200
             return filtered_df
         except KeyError:
             print("Le DataFrame ne contient pas de colonne 'name'.")

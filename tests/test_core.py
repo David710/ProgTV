@@ -50,8 +50,43 @@ class ProgramsTests(unittest.TestCase):
     def test_daylight_saving_conversion(self):
         unix = [pd.Timestamp('2026-03-29T00:30Z').timestamp(), pd.Timestamp('2026-03-29T01:30Z').timestamp()]
         results = self.tv.format_programs([{'start': t, 'end': t + 3600} for t in unix])
-        self.assertEqual(results['start'].dt.hour.tolist(), [1, 3])
+        self.assertEqual(results['start'].dt.hour.tolist(), [23, 0])
         self.assertEqual((results['end'] - results['start']).dt.total_seconds().tolist(), [3600, 3600])
+
+    def test_api_times_are_corrected_without_changing_duration(self):
+        timestamp = pd.Timestamp('2026-10-08T22:00+02:00').timestamp()
+        result = self.tv.format_programs([
+            dict(start=timestamp, end=timestamp + 2700)])
+        self.assertEqual(result.iloc[0]['start'], pd.Timestamp('2026-10-08T20:00+02:00'))
+        self.assertEqual(result.iloc[0]['end'], pd.Timestamp('2026-10-08T20:45+02:00'))
+
+    def test_legacy_cache_correction_is_idempotent_and_preserves_scores(self):
+        original = dataset()
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'legacy.pkl'
+            original.to_pickle(path)
+            corrected = self.tv.read_programs(path)
+            programs = corrected.iloc[0]['programs']
+            self.assertEqual(programs.iloc[0]['start'],
+                             pd.Timestamp('2026-10-07T18:30+02:00'))
+            self.assertEqual(programs['note_pred'].tolist(), [.8, .9])
+            corrected.to_pickle(path)
+            reopened = self.tv.read_programs(path)
+            pd.testing.assert_frame_equal(programs, reopened.iloc[0]['programs'])
+            self.assertEqual(original.iloc[0]['programs'].iloc[0]['start'],
+                             pd.Timestamp('2026-10-07T20:30+02:00'))
+
+    def test_new_api_cache_does_not_receive_correction_twice(self):
+        start = pd.Timestamp('2026-10-08T22:00+02:00').timestamp()
+        raw = pd.DataFrame([dict(name='TF1', programs=[
+            dict(name='JT 20h', start=start, end=start + 2700, note_pred=.5)])])
+        corrected = self.tv.filter_programs(raw, ['TF1'])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'new.pkl'
+            corrected.to_pickle(path)
+            reopened = self.tv.read_programs(path)
+        self.assertEqual(reopened.iloc[0]['programs'].iloc[0]['start'],
+                         pd.Timestamp('2026-10-08T20:00+02:00'))
 
     def test_prediction_reuses_saved_preprocessing(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -167,6 +167,17 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
     possible décalage des horaires source à investiguer. Heuristique horaire
     ne garantit pas le prime time éditorial lorsque les horaires sont erronés.
 
+- 2026-10-08 : correction de deux heures des horaires source.
+  - Début et fin reculés de deux heures avant conversion Europe/Paris ;
+    durée conservée. Nouveaux caches marqués pour éviter une double correction.
+  - Caches historiques corrigés à la lecture en mémoire, sans réécriture ni
+    recalcul des embeddings. Dates et passages à minuit pris en compte.
+  - Validation : 48 tests Python et 10 tests JavaScript réussis ; ancienne base
+    cache, nouvelle préparation, relecture et changement d’heure couverts.
+    Cache réel : JT 20h à 20 h, Intraçables sur TF1 à 21 h 10 dans Ce soir.
+  - Limite : correction fixe demandée pour la source actuelle ; à réévaluer
+    si l’API corrige ses horaires. Instantanés SQLite des anciens votes inchangés.
+
 ## Prochaine étape
 Ajouter les favoris et les rappels/export calendrier, puis évaluer le classement
 personnalisé sur des retours indépendants. Les profils nommés du foyer restent
