@@ -116,7 +116,7 @@ class ProgramsTests(unittest.TestCase):
         data = pd.DataFrame([dict(programs=pd.DataFrame({'desc': [None, np.nan, 12]}))])
         with tempfile.TemporaryDirectory() as folder, patch.dict(sys.modules, {'transformers': transformers}):
             results = self.tv.generate_embeddings(data, 'camembert', Path(folder) / 'programs.pkl')
-        self.assertEqual([call.args[0] for call in tokenizer.call_args_list], ['', '', '12.0'])
+        self.assertEqual([call.args[0] for call in tokenizer.call_args_list], ['', '12.0'])
         self.assertEqual(len(results.iloc[0]['programs']['embeddings_camembert']), 3)
 
     def test_training_file_can_be_absolute_and_errors_are_clear(self):

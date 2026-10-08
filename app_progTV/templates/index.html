@@ -6,6 +6,7 @@
     <title>ProgTV — Votre guide TV</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='preferences.css') }}">
 </head>
 <body>
     <nav class="navbar bg-body-tertiary" aria-label="Choisir une période">
@@ -37,6 +38,50 @@
             </div>
             <button id="reset-filters" type="button" class="btn btn-outline-secondary">Réinitialiser</button>
         </form>
+        <details class="tw-rounded-lg tw-border tw-border-solid tw-border-slate-200 tw-bg-white tw-p-4 tw-mb-4">
+            <summary class="tw-cursor-pointer tw-font-semibold tw-text-slate-800">Mes préférences et mes avis</summary>
+            <p class="tw-mt-3 tw-text-sm tw-text-slate-600">Vos choix sont enregistrés pour ce navigateur et s'appliquent aux suggestions. Les autres vues conservent tous les programmes.</p>
+            <form id="preferences-form">
+                <fieldset id="preferences-fields" disabled class="tw-grid tw-gap-4 md:tw-grid-cols-2 tw-mt-3">
+                    <div>
+                        <label for="liked-categories" class="tw-block tw-font-medium">Catégories préférées</label>
+                        <select id="liked-categories" multiple size="4" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2"></select>
+                    </div>
+                    <div>
+                        <label for="disliked-categories" class="tw-block tw-font-medium">Catégories à exclure</label>
+                        <select id="disliked-categories" multiple size="4" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2"></select>
+                    </div>
+                    <div>
+                        <label for="preferred-channels" class="tw-block tw-font-medium">Chaînes préférées</label>
+                        <select id="preferred-channels" multiple size="4" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2"></select>
+                        <p class="tw-text-xs tw-text-slate-500">Pour sélectionner plusieurs valeurs : Ctrl/Cmd + clic, ou les contrôles de votre téléphone.</p>
+                    </div>
+                    <div class="tw-space-y-3">
+                        <div>
+                            <label for="keywords" class="tw-block tw-font-medium">Ce qui vous plaît</label>
+                            <input id="keywords" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2" placeholder="action, polar, cuisine" maxlength="1000">
+                        </div>
+                        <div>
+                            <label for="avoid-keywords" class="tw-block tw-font-medium">Ce que vous souhaitez éviter</label>
+                            <input id="avoid-keywords" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2" placeholder="horreur, télé-réalité" maxlength="1000">
+                        </div>
+                        <p class="tw-text-xs tw-text-slate-500">Séparez les mots ou expressions par des virgules.</p>
+                        <div>
+                            <label for="preferred-duration" class="tw-block tw-font-medium">Durée maximale habituelle (minutes)</label>
+                            <input id="preferred-duration" type="number" min="1" max="1440" step="1" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2" placeholder="Sans limite">
+                        </div>
+                    </div>
+                    <div class="tw-flex tw-flex-wrap tw-gap-2">
+                        <button id="save-preferences" type="submit" class="tw-rounded tw-bg-blue-700 tw-text-white tw-px-4 tw-py-2 disabled:tw-opacity-50">Enregistrer</button>
+                        <button id="reset-preferences" type="button" class="tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-px-4 tw-py-2">Effacer les préférences</button>
+                    </div>
+                </fieldset>
+            </form>
+            <p id="preferences-status" role="status" aria-live="polite" class="tw-mt-2 tw-text-sm"></p>
+            <h2 class="tw-text-lg tw-font-semibold tw-mt-4">Mes avis</h2>
+            <p id="feedback-metrics" class="tw-text-sm tw-text-slate-600"></p>
+            <div id="feedback-history" class="tw-max-h-64 tw-overflow-y-auto tw-space-y-2"></div>
+        </details>
         <p id="status" role="status" aria-live="polite"></p>
         <div id="programs" class="program-grid"></div>
     </div>
@@ -44,6 +89,7 @@
 
     <!-- Link to the external JavaScript file -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="{{ url_for('static', filename='profile.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

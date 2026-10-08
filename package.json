@@ -1,0 +1,8 @@
+{
+  "name": "progtv-ui",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i app_progTV/static/tailwind.input.css -o app_progTV/static/preferences.css --minify"
+  },
+  "devDependencies": { "tailwindcss": "3.4.17" }
+}

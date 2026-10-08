@@ -21,11 +21,15 @@ class Element {
     addEventListener(event, callback) { this.listeners[event] = callback; }
     setAttribute(key, value) { this.attributes[key] = value; }
     reportValidity() { return true; }
+    get selectedOptions() { return this.children.filter(option => option.selected); }
 }
 
-function harness(search = '') {
+function harness(search = '', withProfile = false) {
     const ids = ['programs', 'page-title', 'status', 'search', 'channel', 'category',
-        'max-duration', 'filters', 'reset-filters'];
+        'max-duration', 'filters', 'reset-filters', 'preferences-form', 'preferences-fields',
+        'preferences-status', 'feedback-history', 'feedback-metrics', 'liked-categories',
+        'disliked-categories', 'preferred-channels', 'keywords', 'avoid-keywords',
+        'preferred-duration', 'reset-preferences'];
     const nodes = Object.fromEntries(ids.map(id => [id, new Element()]));
     const buttons = ['now', 'tonight', 'tomorrow', 'suggestions'].map(view => {
         const button = new Element('button');
@@ -33,6 +37,12 @@ function harness(search = '') {
         return button;
     });
     const requests = [];
+    const profile = {
+        preferences: { liked_categories: [], disliked_categories: [], preferred_channels: [],
+            keywords: [], avoid_keywords: [], max_duration: null },
+        choices: { channels: ['TF1'], categories: ['Film'] }, feedback: [],
+        metrics: { like: 0, dislike: 0, seen: 0 }
+    };
     const window = {
         location: { search, pathname: '/' },
         history: { replaceState(_, __, url) { window.lastUrl = url; } }
@@ -44,10 +54,16 @@ function harness(search = '') {
     };
     const context = { document, window, URL, URLSearchParams, AbortController,
         Intl, Date, setTimeout, clearTimeout,
-        fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve }))
+        fetch: (url, options) => {
+            if (withProfile && url === '/api/profile' && options?.method === 'GET') {
+                return Promise.resolve({ ok: true, json: async () => profile });
+            }
+            return new Promise(resolve => requests.push({ url, options, resolve }));
+        }
     };
+    if (withProfile) vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../app_progTV/static/profile.js'), 'utf8'), context);
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../app_progTV/static/app.js'), 'utf8'), context);
-    return { nodes, buttons, requests, window };
+    return { nodes, buttons, requests, window, profile };
 }
 
 function respond(request, data = [], headers = {}, status = 200) {
@@ -138,4 +154,70 @@ test('debounced search preserves choices even with no matching programs', async 
     assert.equal(h.nodes.channel.value, 'TF1');
     assert.ok(h.nodes.channel.children.some(option => option.value === 'TF1'));
     assert.match(h.nodes.status.textContent, /réinitialiser/);
+});
+
+
+test('preferences save comma-separated tastes and reload suggestions', async () => {
+    const h = harness('?view=suggestions', true);
+    respond(h.requests[0], [program]);
+    await flush();
+    h.nodes.keywords.value = 'action, polar';
+    h.nodes['preferred-duration'].value = '90';
+    h.nodes['liked-categories'].children[0].selected = true;
+    h.nodes['preferences-form'].listeners.submit({ preventDefault() {} });
+    assert.equal(h.requests[1].url, '/api/profile');
+    assert.equal(h.requests[1].options.method, 'PUT');
+    const payload = JSON.parse(h.requests[1].options.body);
+    assert.deepEqual(payload.keywords, ['action', 'polar']);
+    assert.deepEqual(payload.liked_categories, ['Film']);
+    assert.equal(payload.max_duration, 90);
+    h.profile.preferences = payload;
+    respond(h.requests[1], { preferences: payload });
+    await flush();
+    assert.equal(h.nodes['preferences-status'].textContent, 'Préférences enregistrées.');
+    assert.equal(h.nodes['preferences-fields'].disabled, false);
+    assert.match(h.requests[2].url, /^\/api\/suggestions/);
+    respond(h.requests[2], [program]);
+    await flush();
+});
+
+test('feedback can be toggled and button states update only on success', async () => {
+    const h = harness('?view=tomorrow', true);
+    const item = { ...program, feedback: null };
+    respond(h.requests[0], [item]);
+    await flush();
+    const like = descendants(h.nodes.programs).find(node => node.textContent === 'J’aime');
+    const pending = like.listeners.click();
+    assert.equal(h.requests[1].url, '/api/programs/stable-id/feedback');
+    assert.deepEqual(JSON.parse(h.requests[1].options.body), { value: 'like' });
+    respond(h.requests[1], { feedback: 'like' });
+    await pending;
+    assert.equal(like.attributes['aria-pressed'], 'true');
+    respond(h.requests[2], [{ ...item, feedback: 'like' }]);
+    await flush();
+    const pressed = descendants(h.nodes.programs).find(node => node.textContent === 'J’aime');
+    const undo = pressed.listeners.click();
+    assert.deepEqual(JSON.parse(h.requests[3].options.body), { value: null });
+    respond(h.requests[3], { error: 'stockage indisponible' }, {}, 503);
+    await undo;
+    assert.equal(pressed.attributes['aria-pressed'], 'true');
+    assert.equal(pressed.disabled, false);
+    assert.ok(descendants(h.nodes.programs).some(node => node.textContent === 'stockage indisponible'));
+});
+
+test('history undo removes an excluded program even after its schedule expires', async () => {
+    const h = harness('?view=suggestions', true);
+    h.profile.feedback = [{ name: '<b>Ancien film</b>', value: 'seen', content_id: 'old-content' }];
+    respond(h.requests[0], []);
+    await flush();
+    const button = descendants(h.nodes['feedback-history']).find(node => node.tag === 'button');
+    const pending = button.listeners.click();
+    assert.equal(h.requests[1].url, '/api/feedback/old-content');
+    assert.equal(h.requests[1].options.method, 'DELETE');
+    h.profile.feedback = [];
+    respond(h.requests[1], { deleted: true });
+    await pending;
+    assert.match(h.nodes['feedback-history'].children[0].textContent, /Aucun avis/);
+    respond(h.requests[2], [program]);
+    await flush();
 });

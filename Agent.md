@@ -1,6 +1,6 @@
 # Suivi de ProgTV
 
-Mis à jour : 2026-10-07.
+Mis à jour : 2026-10-08.
 
 ## Règle de maintenance
 Mettre ce fichier à jour à chaque évolution : comportement livré, validations,
@@ -102,9 +102,40 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Le jeu initial est limité à une chaîne ; cette MSE ne valide pas encore
     la qualité du classement multi-chaînes.
 
+- 2026-10-08 : préférences et avis personnels implémentés.
+  - Profil anonyme par navigateur (cookie HttpOnly SameSite=Lax), SQLite local
+    dans app_progTV/instance ; aucun compte ou synchronisation entre appareils.
+  - Catégories/chaînes préférées, exclusions, mots appréciés/à éviter et durée
+    habituelle ; validation, enregistrement, remise à zéro et état d'erreur.
+  - Avis J'aime/Pas pour moi/Déjà vu exclusifs, persistants et annulables sur la
+    carte ou dans l'historique, même après disparition du programme du cache.
+  - Identité de contenu par titre/résumé/catégorie normalisés pour partager les
+    avis entre rediffusions ; séparation des épisodes aux résumés différents.
+  - Suggestions ajustées avant le top 5, exclusions des vus/écartés, bonus
+    explicites et signal de genre limité ; raisons affichées, note_pred intacte.
+  - Vues temporelles non masquées par les préférences ; profil sans effet sur le
+    classement initial s'il est vide. Les contraintes des filtres se cumulent.
+  - Explications Ollama fondées sur préférences/avis ; cache contextualisé,
+    sans anciens goûts en dur. Compteurs descriptifs, pas de précision revendiquée.
+  - Contrôles Tailwind compilés localement et versionnés, préfixe tw- sans
+    remplacer Bootstrap ; aucun besoin de Node pour utiliser le site.
+  - Lanceur : environnement Conda actif prioritaire après PROGTV_PYTHON,
+    .venv conservé en repli. Vérifications dans Conda progTV_pytorch.
+  - Validation : 39 tests Python et 7 tests JavaScript réussis ; compilation
+    Tailwind, syntaxe Python/JS/Bash et git diff --check ; sélection du Python
+    explicite/Conda/venv et modes du lanceur vérifiés. Vérification sur cache
+    réel avec une base isolée : 19 chaînes, 5 suggestions, enregistrement de
+    préférences, exclusion Déjà vu et annulation : HTTP 200.
+  - Test ancien des descriptions mis à jour pour tenir compte de la déduplication
+    des embeddings. Données temporaires et caches placés dans ProgTV.
+  - Limites : pas de validation visuelle navigateur ni d'appel Ollama réel ;
+    pondérations à mesurer sur des retours indépendants, pas de réentraînement
+    automatique sur les avis. Effacer le cookie ouvre un nouveau profil.
+
 ## Prochaine étape
-Ajouter les préférences et les retours utilisateur, puis mesurer leur effet sur
-la qualité des recommandations. Les favoris/rappels restent à implémenter.
+Ajouter les favoris et les rappels/export calendrier, puis évaluer le classement
+personnalisé sur des retours indépendants. Les profils nommés du foyer restent
+une évolution ultérieure.
 
 ## Limites du premier lot
 - Limitation initiale résolue : jeu annoté désormais présent, modèle v2 entraîné
@@ -112,15 +143,18 @@ la qualité des recommandations. Les favoris/rappels restent à implémenter.
 - Source distante et génération CamemBERT désormais vérifiées sur les données
   réelles. Génération Ollama réelle toujours non testée.
 - Vérification navigateur visuelle non effectuée ; JavaScript vérifié syntaxiquement.
-- Cache des commentaires local au processus, non persistant ; profil de goûts
-  encore écrit en dur. La source du classement historique n'est pas migrée.
+- Cache des commentaires local au processus, non persistant. Les goûts en dur
+  ont été remplacés par le profil et les avis ; modèle initial non réentraîné
+  automatiquement sur ces retours.
 - Planification quotidienne documentée, pas installée sur le système.
 - Fichiers modèle/prétraitement séparés : garder les deux artefacts ensemble.
 
 # ne pas faire
 - modifier ou supprimer des dossiers à l'exterieur du dossier de travail ProgTV
+- ne pas désactiver la carte wifi
 
 # bonnes pratiques
 - utiliser conda comme gestionnaire d'environnement
 - utiliser PEP8
 - utiliser tailwind css
+- git commit et push sur github après chaque nouvelles feature

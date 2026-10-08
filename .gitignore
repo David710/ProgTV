@@ -181,3 +181,7 @@ program_download/
 
 # Modèle généré au premier lancement (conserver les poids historiques)
 app_progTV/train/trained_model_v2.pth
+
+# Outils UI et tests locaux
+node_modules/
+.test-tmp/

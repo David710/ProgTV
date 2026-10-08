@@ -49,6 +49,9 @@ function renderProgram(program, suggestions) {
         if (label) details.append(element('span', 'badge text-bg-secondary', label));
     }
     body.append(details);
+    if (suggestions && program.recommendation_reasons?.length) {
+        body.append(element('p', 'tw-text-sm tw-text-blue-800', program.recommendation_reasons.join(' · ')));
+    }
     if (suggestions) {
         const button = element('button', 'btn btn-outline-primary', 'Pourquoi je vais aimer ?');
         button.type = 'button';
@@ -79,6 +82,7 @@ function renderProgram(program, suggestions) {
         });
         body.append(button, comment);
     }
+    if (window.Personalization) body.append(window.Personalization.feedbackControls(program));
     card.append(body);
     return card;
 }
@@ -168,6 +172,8 @@ async function loadPrograms() {
         }
         if (data.length) {
             messages.push(`${data.length} programme${data.length > 1 ? 's' : ''}.`);
+        } else if (requestedView === 'suggestions') {
+            messages.push('Aucune suggestion ne correspond à vos filtres, préférences ou avis. Vous pouvez les modifier dans « Mes préférences et mes avis ».');
         } else if (['q', 'channel', 'category', 'max_duration'].some(key => params.has(key))) {
             messages.push('Aucun programme ne correspond à ces filtres. Vous pouvez les réinitialiser.');
         } else {
@@ -210,3 +216,9 @@ document.getElementById('reset-filters').addEventListener('click', () => {
     reloadFilters();
 });
 loadPrograms();
+
+if (window.Personalization) {
+    window.Personalization.onChange = () => {
+        reloadFilters();
+    };
+}

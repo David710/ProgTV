@@ -3,7 +3,13 @@
 set -euo pipefail
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-python_bin="${PROGTV_PYTHON:-$project_dir/.venv/bin/python}"
+if [[ -n "${PROGTV_PYTHON:-}" ]]; then
+    python_bin="$PROGTV_PYTHON"
+elif [[ -n "${CONDA_PREFIX:-}" && "${CONDA_DEFAULT_ENV:-base}" != "base" ]]; then
+    python_bin="$CONDA_PREFIX/bin/python"
+else
+    python_bin="$project_dir/.venv/bin/python"
+fi
 
 if [[ "${1:-}" == "--help" ]]; then
     cat <<'EOF'
@@ -14,7 +20,7 @@ Sans option : actualiser les programmes, puis servir http://127.0.0.1:5000.
 --update-only : actualiser les programmes sans lancer le serveur.
 Exemple : ./run.sh --port 8000
 
-Prérequis : .venv avec requirements.txt installé, accès à la source TV et
+Prérequis : environnement Conda actif ou .venv avec requirements.txt, accès à la source TV et
 à CamemBERT. Le premier lancement entraîne automatiquement le modèle
 à partir du jeu annoté df_programs_tf1_note.pkl fourni dans le dépôt.
 PROGTV_PYTHON permet de choisir un autre exécutable Python.

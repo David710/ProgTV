@@ -5,11 +5,17 @@ Python 3.11 ou supérieur.
 
 ## Installation et lancement
 
+Avec l'environnement Conda déjà installé :
+
 ```sh
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+conda activate progTV_pytorch
+python -m pip install -r requirements.txt
 ./run.sh
 ```
+
+Le lanceur choisit `PROGTV_PYTHON` si défini, sinon le Python de l'environnement
+Conda actif (hors `base`), puis `.venv/bin/python` comme solution de repli.
+La procédure `.venv` existante reste possible.
 
 Après installation, une seule commande met à jour les
 programmes du jour puis lance l'application sur **http://127.0.0.1:5000** :
@@ -18,7 +24,7 @@ programmes du jour puis lance l'application sur **http://127.0.0.1:5000** :
 ./run.sh
 ```
 
-Le script utilise `.venv/bin/python`, fonctionne aussi depuis un autre dossier
+Le script utilise le Python sélectionné ci-dessus, fonctionne depuis un autre dossier
 via son chemin absolu et arrête le lancement si la mise à jour échoue. Le modèle
 compatible est entraîné automatiquement au premier lancement.
 La préparation peut prendre du temps, surtout au premier téléchargement de
@@ -80,6 +86,58 @@ Réponses : liste JSON compatible avec la version précédente ; paramètres inv
 indiquent la fraîcheur, `X-Programs-View-Date` la date consultée et
 `X-Programs-Filters` les chaînes/catégories de la période, au format JSON.
 
+## Préférences et avis personnels
+
+Ouvrir **Mes préférences et mes avis** pour choisir les catégories et chaînes
+préférées, les catégories à exclure, les mots/expressions appréciés ou à éviter
+et la durée maximale habituelle. Enregistrer pour recalculer les suggestions.
+Les filtres temporaires du guide restent indépendants ; les contraintes se cumulent.
+
+Sur chaque carte, choisir **J'aime**, **Pas pour moi** ou **Déjà vu**. Un seul
+avis est actif par contenu ; cliquer à nouveau l'annule. L'historique permet
+également d'annuler un avis même si sa diffusion a disparu du cache.
+Les rediffusions au même titre, résumé et catégorie partagent le même avis,
+indépendamment de la chaîne. Les épisodes aux résumés différents restent distincts.
+
+Les avis et les préférences sont stockés dans
+`app_progTV/instance/profiles.sqlite3` (ignoré par Git), avec un profil anonyme
+par navigateur identifié par un cookie HttpOnly de durée un an. Il n'y a pas de
+compte ni de synchronisation entre appareils ; supprimer le cookie crée un
+nouveau profil. Sauvegarder la base pour conserver les données côté serveur.
+`PROGTV_DATABASE` permet de choisir un autre chemin de base.
+
+Les programmes vus/écartés et les contenus exclus sont retirés des **suggestions**,
+mais restent visibles dans les autres vues. Le classement normalise le rang du
+score du modèle et ajoute des bonus explicites pour les préférences et les avis,
+ainsi qu'un ajustement limité par genre à partir des avis positifs/négatifs.
+Les raisons sont affichées sur les cartes ; `note_pred` reste inchangée. Le modèle
+PyTorch n'est pas réentraîné à chaque avis. Les explications Ollama utilisent le
+profil et les avis, sans goûts prédéfinis, et leur cache tient compte de ce contexte.
+
+Les compteurs d'avis et `like_ratio` sont descriptifs : ce taux n'est pas une
+mesure de précision ni une preuve d'amélioration. Les pondérations initiales
+restent à évaluer sur des retours indépendants des données de classement.
+
+### API du profil
+
+- `GET /api/profile` : préférences, choix disponibles, historique et compteurs.
+- `PUT /api/profile` : remplacer les préférences (objet JSON ; champs omis remis
+  à leur valeur par défaut). Liste de 30 textes maximum, 100 caractères chacun.
+- `PUT /api/programs/<id>/feedback` : `{"value":"like"}`, `dislike`, `seen` ou
+  `null` pour annuler. Programme absent du cache : 404.
+- `DELETE /api/feedback/<content_id>` : annuler un avis enregistré.
+
+Les listes de programmes incluent désormais `content_id` et `feedback` ; les
+suggestions ajoutent `recommendation_score` et `recommendation_reasons`.
+Les réponses personnalisées sont marquées `private, no-store`.
+
+### Styles
+
+Les nouveaux contrôles utilisent Tailwind préfixé `tw-`, sans réinitialisation
+CSS globale ; Bootstrap reste utilisé par le guide existant. Le CSS compilé est
+committé et servi localement : Node n'est pas requis pour lancer l'application.
+Pour modifier les styles : `npm ci --cache .cache/npm`, puis `npm run build:css`.
+
 ## Modèle et compatibilité
 
 Les poids historiques ne contiennent pas leur prétraitement. Au premier lancement,
@@ -111,7 +169,8 @@ Les dates des anciens caches sans fuseau sont interprétées comme UTC, conform�
 ## Tests
 
 ```sh
-python -m unittest discover -s tests -v
+mkdir -p .test-tmp
+TMPDIR="$PWD/.test-tmp" PROGTV_DATABASE="$PWD/.test-tmp/tests.sqlite3" python -m unittest discover -s tests -v
 node --check app_progTV/static/app.js
 node tests/test_frontend.cjs
 ```
