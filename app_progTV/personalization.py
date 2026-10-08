@@ -81,10 +81,15 @@ class ProfileStore:
                     name TEXT NOT NULL,
                     category TEXT NOT NULL,
                     value TEXT NOT NULL,
+                    program_json TEXT,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (profile_id, content_id)
                 );
             ''')
+
+            columns = {row[1] for row in db.execute('PRAGMA table_info(feedback)')}
+            if 'program_json' not in columns:
+                db.execute('ALTER TABLE feedback ADD COLUMN program_json TEXT')
 
     def connect(self):
         return sqlite3.connect(self.path, timeout=10)
@@ -133,14 +138,17 @@ class ProfileStore:
                 db.execute(
                     'INSERT INTO feedback '
                     '(profile_id, content_id, program_id, name, category, '
-                    'value) '
-                    'VALUES (?, ?, ?, ?, ?, ?) '
+                    'value, program_json) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?) '
                     'ON CONFLICT(profile_id, content_id) DO UPDATE SET '
-                    'program_id=excluded.program_id, value=excluded.value, '
+                    'program_id=excluded.program_id, name=excluded.name, '
+                    'category=excluded.category, value=excluded.value, '
+                    'program_json=excluded.program_json, '
                     'updated_at=CURRENT_TIMESTAMP',
                     (profile_id, key, str(program['id']),
                      str(program.get('name') or ''),
-                     str(program.get('cat') or ''), value),
+                     str(program.get('cat') or ''), value,
+                     json.dumps(program, ensure_ascii=False, allow_nan=False)),
                 )
         return key
 

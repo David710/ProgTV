@@ -143,6 +143,40 @@ class ProfileAPITests(unittest.TestCase):
         self.client.put(url, json={'value': None})
         self.assertEqual(self.client.get('/api/profile').json['feedback'], [])
 
+    def test_full_content_persists_after_cache_disappears(self):
+        program = self.client.get('/api/programs?view=tomorrow').json[0]
+        url = f"/api/programs/{program['id']}/feedback"
+        self.assertEqual(self.client.put(url, json={'value': 'like'}).status_code, 200)
+        with sqlite3.connect(web.app.config['PROFILE_DATABASE']) as db:
+            saved = json.loads(db.execute(
+                'SELECT program_json FROM feedback'
+            ).fetchone()[0])
+        for field in ['name', 'desc', 'cat', 'start', 'end', 'channel_name']:
+            self.assertEqual(saved[field], program[field])
+        with patch.object(web, 'load_programs', return_value=(self.tv, None, None)):
+            cookie = self.client.get_cookie('progtv_profile').value
+            reopened = web.app.test_client()
+            reopened.set_cookie('progtv_profile', cookie)
+            self.assertEqual(reopened.get('/api/profile').json['feedback'][0]['value'], 'like')
+
+    def test_existing_database_migrates_without_losing_votes(self):
+        path = web.app.config['PROFILE_DATABASE']
+        with sqlite3.connect(path) as db:
+            db.execute('CREATE TABLE feedback (profile_id TEXT, content_id TEXT, '
+                       'program_id TEXT, name TEXT, category TEXT, value TEXT, '
+                       'updated_at TEXT DEFAULT CURRENT_TIMESTAMP, '
+                       'PRIMARY KEY (profile_id, content_id))')
+            db.execute("INSERT INTO feedback (profile_id, content_id, program_id, "
+                       "name, category, value) VALUES ('p', 'c', 'i', 'Film', 'Film', 'like')")
+        store = ProfileStore(path)
+        self.assertEqual(store.feedback('p')['c']['value'], 'like')
+        program = self.client.get('/api/programs?view=tomorrow').json[0]
+        store.save_feedback('p', program, 'like')
+        with sqlite3.connect(path) as db:
+            self.assertEqual(db.execute(
+                'SELECT COUNT(program_json) FROM feedback'
+            ).fetchone()[0], 1)
+
     def test_feedback_validation_and_unknown_program(self):
         program = self.tv.flatten_programs(self.data).iloc[0]
         url = f"/api/programs/{program['id']}/feedback"

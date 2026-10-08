@@ -159,11 +159,14 @@
                     paint();
                     message.textContent = next ? 'Avis enregistré.' : 'Avis annulé.';
                     await refresh();
-                    window.Personalization.onChange?.();
+                    // Garder les cartes en place pendant l’évaluation.
                 } catch (error) {
                     message.textContent = error.message;
                 } finally {
                     for (const [, control] of buttons) control.disabled = false;
+                    if (document.activeElement === document.body || document.activeElement === button) {
+                        button.focus({ preventScroll: true });
+                    }
                 }
             });
             buttons.push([value, button]);

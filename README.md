@@ -96,6 +96,8 @@ Les filtres temporaires du guide restent indépendants ; les contraintes se cumu
 Sur chaque carte, choisir **J'aime**, **Pas pour moi** ou **Déjà vu**. Un seul
 avis est actif par contenu ; cliquer à nouveau l'annule. L'historique permet
 également d'annuler un avis même si sa diffusion a disparu du cache.
+Le vote conserve la carte et le focus sur le bouton utilisé. Les suggestions
+sont recalculées à la prochaine consultation de la vue.
 Les rediffusions au même titre, résumé et catégorie partagent le même avis,
 indépendamment de la chaîne. Les épisodes aux résumés différents restent distincts.
 
@@ -104,6 +106,10 @@ Les avis et les préférences sont stockés dans
 par navigateur identifié par un cookie HttpOnly de durée un an. Il n'y a pas de
 compte ni de synchronisation entre appareils ; supprimer le cookie crée un
 nouveau profil. Sauvegarder la base pour conserver les données côté serveur.
+Chaque vote conserve également un instantané JSON du programme (résumé, chaîne,
+horaires et autres données affichées). Les bases existantes sont migrées
+automatiquement ; le contenu des anciens votes ne peut pas être reconstitué
+après disparition du cache.
 `PROGTV_DATABASE` permet de choisir un autre chemin de base.
 
 Les programmes vus/écartés et les contenus exclus sont retirés des **suggestions**,

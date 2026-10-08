@@ -132,6 +132,18 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
     pondérations à mesurer sur des retours indépendants, pas de réentraînement
     automatique sur les avis. Effacer le cookie ouvre un nouveau profil.
 
+- 2026-10-08 : contenu des votes et stabilité de la page.
+  - Chaque avis conserve le programme complet en JSON dans SQLite, notamment
+    résumé, chaîne et horaires ; migration automatique sans perte des anciens avis.
+  - Les boutons de vote ne rechargent plus les cartes : position conservée et
+    focus restitué sans défilement si l’utilisateur n’a pas changé de contrôle.
+  - Suggestions recalculées à la prochaine consultation ; historique et
+    compteurs actualisés après chaque vote.
+  - Validation : 41 tests Python et 10 tests JavaScript réussis, syntaxe JS et
+    git diff --check valides. Persistance hors cache et migration couvertes.
+  - Limites : DOM simulé, pas de vérification visuelle navigateur ; instantané
+    absent pour les anciens avis jusqu’à un nouveau vote sur le programme.
+
 ## Prochaine étape
 Ajouter les favoris et les rappels/export calendrier, puis évaluer le classement
 personnalisé sur des retours indépendants. Les profils nommés du foyer restent

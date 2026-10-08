@@ -20,6 +20,7 @@ class Element {
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(event, callback) { this.listeners[event] = callback; }
     setAttribute(key, value) { this.attributes[key] = value; }
+    focus(options) { this.focusOptions = options; }
     reportValidity() { return true; }
     get selectedOptions() { return this.children.filter(option => option.selected); }
 }
@@ -186,6 +187,7 @@ test('feedback can be toggled and button states update only on success', async (
     const item = { ...program, feedback: null };
     respond(h.requests[0], [item]);
     await flush();
+    const card = h.nodes.programs.children[0];
     const like = descendants(h.nodes.programs).find(node => node.textContent === 'J’aime');
     const pending = like.listeners.click();
     assert.equal(h.requests[1].url, '/api/programs/stable-id/feedback');
@@ -193,12 +195,13 @@ test('feedback can be toggled and button states update only on success', async (
     respond(h.requests[1], { feedback: 'like' });
     await pending;
     assert.equal(like.attributes['aria-pressed'], 'true');
-    respond(h.requests[2], [{ ...item, feedback: 'like' }]);
-    await flush();
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.nodes.programs.children[0], card);
+    assert.equal(like.focusOptions.preventScroll, true);
     const pressed = descendants(h.nodes.programs).find(node => node.textContent === 'J’aime');
     const undo = pressed.listeners.click();
-    assert.deepEqual(JSON.parse(h.requests[3].options.body), { value: null });
-    respond(h.requests[3], { error: 'stockage indisponible' }, {}, 503);
+    assert.deepEqual(JSON.parse(h.requests[2].options.body), { value: null });
+    respond(h.requests[2], { error: 'stockage indisponible' }, {}, 503);
     await undo;
     assert.equal(pressed.attributes['aria-pressed'], 'true');
     assert.equal(pressed.disabled, false);
@@ -221,3 +224,21 @@ test('history undo removes an excluded program even after its schedule expires',
     respond(h.requests[2], [program]);
     await flush();
 });
+
+for (const label of ['J’aime', 'Pas pour moi', 'Déjà vu']) {
+    test(`${label} preserves the suggestion card and focus`, async () => {
+        const h = harness('?view=suggestions', true);
+        respond(h.requests[0], [{ ...program, feedback: null }]);
+        await flush();
+        const card = h.nodes.programs.children[0];
+        const button = descendants(card).find(node => node.textContent === label);
+        const pending = button.listeners.click();
+        respond(h.requests[1], { feedback: 'saved' });
+        await pending;
+        assert.equal(h.requests.length, 2);
+        assert.equal(h.nodes.programs.children[0], card);
+        assert.equal(button.focusOptions.preventScroll, true);
+        assert.equal(button.disabled, false);
+        assert.equal(button.attributes['aria-pressed'], 'true');
+    });
+}
