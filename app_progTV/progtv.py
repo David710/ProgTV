@@ -17,6 +17,32 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
+# Ordre éditorial du guide : grandes chaînes nationales, puis TNT.
+CHANNEL_ORDER = (
+    'TF1', 'France 2', 'France 3', 'Canal+', 'France 5', 'M6', 'Arte',
+    'C8', 'W9', 'TMC', 'TFX', 'NRJ12', 'LCP', 'France 4', 'BFMTV',
+    'CNews', 'LCI', 'franceinfo', 'Gulli', 'TF1 Séries Films',
+    'La chaîne L’Équipe', '6ter', 'RMC Story', 'RMC Découverte',
+    'Chérie 25', 'Paris Première',
+)
+
+
+def channel_sort_key(name):
+    """Accepter les variantes de casse, accents, espaces et ponctuation."""
+    def normalize(value):
+        text = unicodedata.normalize('NFKD', str(value).casefold())
+        return ''.join(char for char in text
+                       if char.isalnum() and not unicodedata.combining(char))
+
+    normalized = normalize(name)
+    aliases = {'lequipe': 'lachainelequipe', 'lcpassembleenationale': 'lcp',
+               'lcppublicsenat': 'lcp', 'publicsenat': 'lcp'}
+    normalized = aliases.get(normalized, normalized)
+    order = {normalize(channel): index
+             for index, channel in enumerate(CHANNEL_ORDER)}
+    return order.get(normalized, len(CHANNEL_ORDER)), normalized
+
+
 # Construire le modèle
 class NeuralNetwork(nn.Module):
     def __init__(self, input_dim):
@@ -349,6 +375,7 @@ class TVProgram():
             if column in programs else []
             for key, column in (("channels", "channel_name"), ("categories", "cat"))
         }
+        choices['channels'].sort(key=channel_sort_key)
         if channel:
             programs = programs[programs["channel_name"] == channel]
         if category:
@@ -366,7 +393,10 @@ class TVProgram():
             programs = programs.sort_values(["note_pred", "start", "id"], ascending=[False, True, True])
             programs = programs.drop_duplicates("id").head(max(0, limit))
         else:
-            programs = programs.sort_values(["start", "channel_name", "id"]).drop_duplicates("id")
+            programs = programs.assign(
+                _channel_order=programs['channel_name'].map(channel_sort_key)
+            ).sort_values(['_channel_order', 'start', 'id']).drop_duplicates('id')
+            programs = programs.drop(columns='_channel_order')
         return programs, choices, selected_date
 
     def get_best_programs(self, rated_progs, n=5, whitelist=None, now=None):

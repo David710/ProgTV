@@ -144,6 +144,17 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Limites : DOM simulé, pas de vérification visuelle navigateur ; instantané
     absent pour les anciens avis jusqu’à un nouveau vote sur le programme.
 
+- 2026-10-08 : ordre des chaînes dans le guide.
+  - Maintenant, Ce soir et Demain : TF1, France 2, France 3, Canal+,
+    France 5, M6, Arte, puis chaînes TNT ; horaires croissants par chaîne.
+  - Même ordre pour le filtre et les préférences ; variantes de noms tolérées,
+    chaînes inconnues à la fin par ordre alphabétique. Affinité des suggestions
+    conservée, aucun recalcul des embeddings nécessaire.
+  - Validation : 43 tests Python et 10 tests JavaScript réussis ; ordre par
+    chaîne avant horaires, trois vues et variantes de noms couverts.
+  - Limite : page programme-tv.net fournie inaccessible via l’outil web ;
+    ordre éditorial appliqué selon la demande, sans copie exacte revendiquée.
+
 ## Prochaine étape
 Ajouter les favoris et les rappels/export calendrier, puis évaluer le classement
 personnalisé sur des retours indépendants. Les profils nommés du foyer restent

@@ -68,6 +68,13 @@ et indique sa date ; les programmes terminés ne sont pas recommandés.
 - **Suggestions** : les cinq prochaines diffusions les mieux classées parmi
   celles qui correspondent aux filtres.
 
+Les vues Maintenant, Ce soir et Demain affichent d’abord TF1, France 2,
+France 3, Canal+, France 5, M6 et Arte, puis les chaînes de la TNT.
+Les programmes sont triés par horaire à l’intérieur de chaque chaîne ;
+les chaînes supplémentaires suivent par ordre alphabétique. Le filtre des chaînes
+et les préférences suivent le même ordre. Suggestions conserve le classement
+par affinité.
+
 Recherche dans le titre, résumé, chaîne et catégorie, sans distinction de casse
 ou d'accents. Les caractères sont recherchés littéralement (pas de regex).
 Filtres combinables par chaîne, catégorie et durée maximale en minutes.

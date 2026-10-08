@@ -195,6 +195,7 @@ def profile():
                 choices[key] = sorted(
                     programs[column].dropna().astype(str)
                     .loc[lambda values: values != ''].unique(),
+                    key=progtv.channel_sort_key if key == 'channels' else None,
                 )
     return jsonify(
         preferences=store.preferences(identity),

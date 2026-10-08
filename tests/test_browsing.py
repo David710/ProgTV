@@ -79,6 +79,42 @@ class BrowsingTests(unittest.TestCase):
         programs, _, _ = self.select(view='tonight', max_duration=90)
         self.assertEqual(programs['name'].tolist(), ['Polar'])
 
+    def test_channel_order_precedes_time_and_sorts_filter_choices(self):
+        rows = []
+        for channel in ['Chérie 25', 'Z locale', 'France 3', 'Arte',
+                        'W9', 'France 2', 'TF1', 'M6', 'A locale',
+                        'Canal+', 'France 5', 'TF1 Séries-Films']:
+            programs = pd.DataFrame([
+                dict(name=f'{channel} tard', start=pd.Timestamp('2026-10-08T21:00+02:00'),
+                     end=pd.Timestamp('2026-10-08T23:00+02:00'), note_pred=.5),
+                dict(name=f'{channel} tôt', start=pd.Timestamp('2026-10-08T20:00+02:00'),
+                     end=pd.Timestamp('2026-10-08T22:00+02:00'), note_pred=.8),
+            ])
+            rows.append(dict(name=channel, programs=programs))
+        data = pd.DataFrame(rows)
+        expected = ['TF1', 'France 2', 'France 3', 'Canal+', 'France 5',
+                    'M6', 'Arte', 'W9', 'TF1 Séries-Films', 'Chérie 25',
+                    'A locale', 'Z locale']
+        result, choices, _ = self.tv.select_programs(
+            data, view='tomorrow', now=self.now)
+        self.assertEqual(choices['channels'], expected)
+        self.assertEqual(result['channel_name'].tolist(),
+                         [channel for channel in expected for _ in range(2)])
+        self.assertEqual(result['name'].tolist(),
+                         [f'{channel} {time}' for channel in expected
+                          for time in ['tôt', 'tard']])
+        for view in ['now', 'tonight']:
+            result, _, _ = self.tv.select_programs(
+                data, view=view, now=pd.Timestamp('2026-10-08T21:00+02:00'))
+            self.assertEqual(result['channel_name'].drop_duplicates().tolist(), expected)
+
+    def test_channel_name_variants_share_the_same_rank(self):
+        from progtv import channel_sort_key
+        for first, second in [('Arte', 'ARTE'), ('TF1 Séries-Films', 'TF1 SERIES FILMS'),
+                              ('La chaine l’Équipe', "L'Equipe"),
+                              ('Canal+', 'CANAL +')]:
+            self.assertEqual(channel_sort_key(first), channel_sort_key(second))
+
     def test_empty_views_and_invalid_view(self):
         data = pd.DataFrame([dict(name='TF1', programs=pd.DataFrame())])
         for view in ['now', 'tonight', 'tomorrow', 'suggestions']:
