@@ -193,6 +193,17 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
     instantané sans abonnement ni resynchronisation des changements d’horaires.
     Retirer un favori n’efface pas un événement importé. Pas de test visuel navigateur.
 
+- 2026-10-09 : diversité des suggestions, suppression des titres répétés.
+  - Après classement personnalisé, une seule diffusion par titre normalisé
+    (casse, accents et espaces ignorés), puis limite de cinq suggestions.
+  - Épisodes et rediffusions du même titre regroupés ; meilleur score conservé,
+    horaire le plus proche à égalité. Autres vues et identités des avis inchangées.
+  - Validation : 54 tests Python réussis et git diff --check ; épisodes sur
+    chaînes différentes, priorité personnalisée, remplissage du top 5 et
+    maintien des diffusions dans Demain couverts. Cache réel : cinq titres uniques.
+  - Limite : les titres explicitement différents (suffixes de saison/épisode)
+    restent distincts ; aucune correspondance approximative ajoutée.
+
 ## Prochaine étape
 Évaluer le classement personnalisé sur des retours indépendants. Les profils nommés du foyer restent
 une évolution ultérieure.

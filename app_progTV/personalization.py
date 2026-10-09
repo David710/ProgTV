@@ -255,10 +255,16 @@ def personalize(programs, preferences, feedback):
         programs.at[index, 'recommendation_score'] += bonus
         reasons.append(explanation or ['Classement du modèle'])
     programs['recommendation_reasons'] = reasons
+    # Une série ou un film ne doit occuper qu’une place dans les suggestions,
+    # même si les épisodes/résumés et les chaînes de diffusion diffèrent.
+    programs['_suggestion_title'] = [
+        ' '.join(normalized(row.get('name', '')).split()) or row['content_id']
+        for row in programs.to_dict('records')
+    ]
     return programs.sort_values(
         ['recommendation_score', 'note_pred', 'start', 'id'],
         ascending=[False, False, True, True],
-    )
+    ).drop_duplicates('_suggestion_title').drop(columns='_suggestion_title')
 
 
 def feedback_metrics(feedback):

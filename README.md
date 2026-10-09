@@ -128,6 +128,10 @@ Les programmes vus/écartés et les contenus exclus sont retirés des **suggesti
 mais restent visibles dans les autres vues. Le classement normalise le rang du
 score du modèle et ajoute des bonus explicites pour les préférences et les avis,
 ainsi qu'un ajustement limité par genre à partir des avis positifs/négatifs.
+Une seule diffusion par titre est proposée dans les suggestions, même si plusieurs
+épisodes ou rediffusions sont disponibles. La diffusion au meilleur score
+personnalisé est conservée ; à égalité de scores, la plus proche est retenue.
+Les autres vues continuent d’afficher toutes les diffusions.
 Les raisons sont affichées sur les cartes ; `note_pred` reste inchangée. Le modèle
 PyTorch n'est pas réentraîné à chaque avis. Les explications Ollama utilisent le
 profil et les avis, sans goûts prédéfinis, et leur cache tient compte de ce contexte.

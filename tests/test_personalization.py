@@ -68,6 +68,26 @@ class RankingTests(unittest.TestCase):
         result = personalize(self.programs, preferences, feedback)
         self.assertEqual(result.loc[5, 'recommendation_reasons'], ['Classement du modèle'])
 
+    def test_suggestions_deduplicate_titles_across_episodes_and_channels(self):
+        programs = self.programs.copy()
+        repeated = programs.iloc[[0]].copy()
+        repeated['id'] = 'rerun'
+        repeated['name'] = '  PROGRAMME   0 '
+        repeated['desc'] = 'Un autre épisode'
+        repeated['channel_name'] = 'France 2'
+        repeated['start'] += pd.Timedelta(days=1)
+        programs = pd.concat([programs, repeated], ignore_index=True)
+        result = personalize(programs, self.preferences, {}).head(5)
+        self.assertEqual(len(result), 5)
+        self.assertNotIn('rerun', result['id'].tolist())
+        self.assertEqual(result['name'].tolist().count('Programme 0'), 1)
+        # Le bonus d’une chaîne préférée choisit sa diffusion pour ce titre.
+        preferences = validate_preferences({'preferred_channels': ['France 2']})
+        result = personalize(programs, preferences, {}).head(5)
+        self.assertIn('rerun', result['id'].tolist())
+        self.assertNotIn(programs.iloc[0]['id'], result['id'].tolist())
+        self.assertNotIn('_suggestion_title', result.columns)
+
     def test_content_key_matches_missing_values_and_ignores_channel(self):
         base = dict(name='Film', cat='Film', desc=None, channel_name='TF1')
         rerun = dict(base, desc=float('nan'), channel_name='France 2')
@@ -199,6 +219,19 @@ class ProfileAPITests(unittest.TestCase):
         self.assertEqual(next(row['feedback'] for row in tomorrow if row['id'] == first['id']), 'seen')
         self.client.put('/api/profile', json={'disliked_categories': ['Film']})
         self.assertEqual([row['cat'] for row in self.client.get('/api/suggestions').json], ['Sport'])
+
+    def test_api_suggestions_unique_titles_without_hiding_airings_in_tv_views(self):
+        programs = self.data.iloc[0]['programs'].copy()
+        repeated = programs.iloc[[0]].copy()
+        repeated['start'] += pd.Timedelta(minutes=30)
+        repeated['end'] += pd.Timedelta(minutes=30)
+        repeated['desc'] = 'Autre épisode du même programme'
+        self.data.at[0, 'programs'] = pd.concat([programs, repeated], ignore_index=True)
+        suggestions = self.client.get('/api/suggestions').json
+        self.assertEqual(len(suggestions), 5)
+        self.assertEqual(len({row['name'] for row in suggestions}), 5)
+        tomorrow = self.client.get('/api/programs?view=tomorrow').json
+        self.assertEqual(len(tomorrow), 7)
 
     def test_comment_cache_includes_preferences_and_prompt_receives_them(self):
         program = self.tv.flatten_programs(self.data).iloc[0]
