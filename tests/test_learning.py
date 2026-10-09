@@ -116,7 +116,7 @@ class ExplanationTests(unittest.TestCase):
         self.assertNotEqual(old, explanations.cache_key(self.program, changed))
         with patch.object(explanations, 'MODEL', 'different'):
             self.assertNotEqual(old, explanations.cache_key(self.program, self.context))
-        with patch.object(explanations, 'PROMPT_VERSION', 2):
+        with patch.object(explanations, 'PROMPT_VERSION', explanations.PROMPT_VERSION + 1):
             self.assertNotEqual(old, explanations.cache_key(self.program, self.context))
 
     def test_missing_summary_skips_llm_and_failures_do_not_enter_cache(self):
@@ -133,22 +133,34 @@ class ExplanationTests(unittest.TestCase):
 
     def test_only_exact_quotes_are_accepted_and_llm_settings_are_bounded(self):
         for excerpt, accepted in [('recettes locales', True), ('football', False), ('', True), ('x' * 241, False)]:
-            response = {'message': {'content': json.dumps({'excerpt': excerpt})}, 'done_reason': 'stop'}
+            response = {'message': {'content': json.dumps({'explanation': 'Ce programme rejoint votre intérêt pour les recettes.', 'excerpt': excerpt})}, 'done_reason': 'stop'}
             with patch.object(explanations.ollama, 'Client') as client:
                 client.return_value.chat.return_value = response
                 if accepted:
-                    result = explanations.generate_excerpt(self.program, self.preferences, ['Mot apprécié : recettes'])
-                    self.assertEqual(bool(result), bool(excerpt))
+                    result = explanations.generate_explanation(self.program, self.preferences, ['Mot apprécié : recettes'])
+                    self.assertIn('rejoint votre intérêt', result)
+                    self.assertEqual('Le résumé indique' in result, bool(excerpt))
                 else:
                     with self.assertRaises(ValueError):
-                        explanations.generate_excerpt(self.program)
+                        explanations.generate_explanation(self.program)
                 options = client.return_value.chat.call_args.kwargs
                 self.assertFalse(options['think'])
                 self.assertEqual(options['keep_alive'], '30m')
-                self.assertEqual(options['options']['num_predict'], 180)
+                self.assertEqual(options['options']['num_predict'], 300)
                 payload = json.loads(options['messages'][1]['content'])
+                self.assertNotIn('preferences', payload)
+                self.assertEqual(payload['correspondance_etablie'], accepted)
                 self.assertEqual(payload['titre'], self.program['name'])
                 self.assertEqual(payload['duree_minutes'], self.program['duration'])
+
+    def test_missing_empty_or_overlong_explanation_is_rejected(self):
+        for explanation in (None, '', '   ', 'x' * 501):
+            response = {'message': {'content': json.dumps({
+                'explanation': explanation, 'excerpt': 'recettes locales'})}}
+            with patch.object(explanations.ollama, 'Client') as client:
+                client.return_value.chat.return_value = response
+                with self.assertRaises(ValueError):
+                    explanations.generate_explanation(self.program)
 
     def test_same_request_concurrently_generates_only_once(self):
         entered = threading.Event()

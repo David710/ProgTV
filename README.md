@@ -176,9 +176,11 @@ lexicaux, pas une compréhension des synonymes ou une preuve de préférence for
 **Pourquoi ce programme ?** affiche immédiatement les raisons du classement,
 puis reçoit en deux étapes un complément Qwen. Le modèle reçoit le titre,
 la catégorie, la chaîne, la durée, le résumé, les goûts et les raisons calculées.
-Il sélectionne un court extrait ; le serveur vérifie que cet extrait existe
-littéralement dans le résumé avant de l’afficher. Aucune appréciation libre du
-LLM n’est affichée. Un résumé absent ne déclenche pas d’appel au modèle.
+Il rédige une ou deux phrases reliant les raisons calculées au programme, avec
+une réserve explicite si aucune correspondance n’est établie ou si le programme
+contredit les préférences. Un extrait appuie sa réponse : le serveur vérifie sa
+présence littérale dans le résumé. Cette vérification garantit la provenance de
+la citation, pas toutes les affirmations du texte généré. Un résumé absent ne déclenche pas d’appel au modèle.
 Si Ollama est indisponible, la première explication reste visible et le complément
 peut être réessayé. Les réponses chargées dans les cartes sont invalidées après
 un changement de goûts ou d’avis.

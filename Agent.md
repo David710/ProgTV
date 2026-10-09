@@ -232,6 +232,20 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
     Le réentraînement PyTorch et une synthèse libre des goûts par LLM restent
     distincts de ce mécanisme. SDK Ollama >=0.6 requis.
 
+- 2026-10-10 : phrases explicatives Qwen dans Pourquoi ce programme.
+  - Remplacement du complément citation seule par une ou deux phrases naturelles
+    suivies d’un extrait facultatif vérifié littéralement dans le résumé.
+  - Seules les raisons calculées et les données du programme sont fournies au
+    LLM : les goûts bruts ne peuvent plus être interprétés comme des thèmes du
+    programme. Consignes explicites pour absence de correspondance et exclusions.
+  - Version des consignes portée à 2 pour renouveler automatiquement le cache ;
+    génération bornée à 300 tokens et explication à 500 caractères.
+  - Validation : 67 tests Python réussis, suite frontend réussie et diff vérifié.
+    Test Ollama réel : dix cas, générations à chaud 0,5–1,1 s ; premier événement
+    API 0,155 s, réponse cachée 0,094 s. Aucun recalcul des embeddings.
+  - Limite : la présence de la citation est vérifiée, mais le texte libre du LLM
+    peut encore présenter des imprécisions ; les raisons calculées restent visibles.
+
 ## Prochaine étape
 Évaluer le classement personnalisé sur des retours indépendants. Les profils nommés du foyer restent
 une évolution ultérieure.

@@ -465,9 +465,9 @@ class TVProgram():
 
     def get_ollama_comment(self, program_desc, preferences=None,
                            program=None, reasons=None):
-        from explanations import generate_excerpt
+        from explanations import generate_explanation
         program = program or {'desc': program_desc}
-        return generate_excerpt(program, preferences=preferences, reasons=reasons)
+        return generate_explanation(program, preferences=preferences, reasons=reasons)
 
     def add_ollama_comment_to_dataset(self, df):
         df = df.copy()
