@@ -20,6 +20,7 @@ class Element {
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(event, callback) { this.listeners[event] = callback; }
     setAttribute(key, value) { this.attributes[key] = value; }
+    getAttribute(key) { return this.attributes[key]; }
     focus(options) { this.focusOptions = options; }
     reportValidity() { return true; }
     get selectedOptions() { return this.children.filter(option => option.selected); }
@@ -30,7 +31,7 @@ function harness(search = '', withProfile = false) {
         'max-duration', 'filters', 'reset-filters', 'preferences-form', 'preferences-fields',
         'preferences-status', 'feedback-history', 'feedback-metrics', 'liked-categories',
         'disliked-categories', 'preferred-channels', 'keywords', 'avoid-keywords',
-        'preferred-duration', 'reset-preferences'];
+        'preferred-duration', 'reset-preferences', 'favorites-history', 'favorites-status'];
     const nodes = Object.fromEntries(ids.map(id => [id, new Element()]));
     const buttons = ['now', 'tonight', 'tomorrow', 'suggestions'].map(view => {
         const button = new Element('button');
@@ -41,7 +42,7 @@ function harness(search = '', withProfile = false) {
     const profile = {
         preferences: { liked_categories: [], disliked_categories: [], preferred_channels: [],
             keywords: [], avoid_keywords: [], max_duration: null },
-        choices: { channels: ['TF1'], categories: ['Film'] }, feedback: [],
+        choices: { channels: ['TF1'], categories: ['Film'] }, feedback: [], favorites: [],
         metrics: { like: 0, dislike: 0, seen: 0 }
     };
     const window = {
@@ -50,7 +51,8 @@ function harness(search = '', withProfile = false) {
     };
     const document = {
         getElementById: id => nodes[id],
-        querySelectorAll: () => buttons,
+        querySelectorAll: selector => selector === '[data-favorite-id]'
+            ? descendants(nodes.programs).filter(node => node.dataset.favoriteId) : buttons,
         createElement: tag => new Element(tag)
     };
     const context = { document, window, URL, URLSearchParams, AbortController,
@@ -242,3 +244,56 @@ for (const label of ['J’aime', 'Pas pour moi', 'Déjà vu']) {
         assert.equal(button.attributes['aria-pressed'], 'true');
     });
 }
+
+
+test('favorites toggle without replacing cards and calendar reminder updates the link', async () => {
+    const h = harness('?view=tomorrow', true);
+    respond(h.requests[0], [{ ...program, favorite: false }]);
+    await flush();
+    const card = h.nodes.programs.children[0];
+    const button = descendants(card).find(node => node.textContent === 'Ajouter aux favoris');
+    const pending = button.listeners.click();
+    assert.equal(h.requests[1].options.method, 'PUT');
+    assert.equal(h.requests[1].url, '/api/programs/stable-id/favorite');
+    h.profile.favorites = [{ ...program, end: '2026-10-08T22:00:00+02:00' }];
+    respond(h.requests[1], { favorite: true });
+    await pending;
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.nodes.programs.children[0], card);
+    assert.equal(button.attributes['aria-pressed'], 'true');
+    assert.equal(button.focusOptions.preventScroll, true);
+    assert.ok(descendants(h.nodes['favorites-history']).some(node => node.textContent === program.name));
+    const select = descendants(card).find(node => node.tag === 'select');
+    const link = descendants(card).find(node => node.tag === 'a');
+    assert.equal(link.href, '/api/programs/stable-id/calendar?reminder=15');
+    select.value = '60';
+    select.listeners.change();
+    assert.equal(link.href, '/api/programs/stable-id/calendar?reminder=60');
+    const undo = button.listeners.click();
+    assert.equal(h.requests[2].options.method, 'DELETE');
+    h.profile.favorites = [];
+    respond(h.requests[2], { favorite: false });
+    await undo;
+    assert.equal(button.attributes['aria-pressed'], 'false');
+    assert.equal(h.nodes.programs.children[0], card);
+});
+
+test('favorite storage failure keeps the card state and history removal updates it', async () => {
+    const h = harness('?view=tomorrow', true);
+    h.profile.favorites = [{ ...program, end: '2026-10-08T22:00:00+02:00' }];
+    respond(h.requests[0], [{ ...program, favorite: true }]);
+    await flush();
+    const button = descendants(h.nodes.programs).find(node => node.dataset.favoriteId);
+    const pending = button.listeners.click();
+    respond(h.requests[1], { error: 'stockage indisponible' }, {}, 503);
+    await pending;
+    assert.equal(button.attributes['aria-pressed'], 'true');
+    assert.equal(button.disabled, false);
+    const remove = descendants(h.nodes['favorites-history']).find(node => node.tag === 'button');
+    const undo = remove.listeners.click();
+    h.profile.favorites = [];
+    respond(h.requests[2], { favorite: false });
+    await undo;
+    assert.equal(button.attributes['aria-pressed'], 'false');
+    assert.equal(h.requests.length, 3);
+});

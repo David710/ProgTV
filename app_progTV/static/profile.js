@@ -4,6 +4,8 @@
     const fields = document.getElementById('preferences-fields');
     const status = document.getElementById('preferences-status');
     const history = document.getElementById('feedback-history');
+    const favoritesHistory = document.getElementById('favorites-history');
+    const favoritesStatus = document.getElementById('favorites-status');
     const metrics = document.getElementById('feedback-metrics');
     const controls = {
         liked_categories: document.getElementById('liked-categories'),
@@ -88,6 +90,7 @@
                 return row;
             }));
             if (!data.feedback.length) history.append(node('p', 'Aucun avis enregistré.'));
+            renderFavorites(data.favorites || []);
             if (fill) status.textContent = '';
         } catch (error) {
             status.textContent = error.message;
@@ -130,6 +133,107 @@
     document.getElementById('reset-preferences').addEventListener('click', () => {
         if (ready) save(defaults);
     });
+
+    const controlStyle = 'tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-px-3 tw-py-2';
+
+    function calendarControls(program) {
+        const group = node('div', '', 'tw-flex tw-flex-wrap tw-items-center tw-gap-2');
+        const label = node('label', 'Rappel : ', 'tw-text-sm');
+        const select = node('select', '', controlStyle);
+        select.setAttribute('aria-label', `Rappel pour ${program.name}`);
+        for (const [value, text] of [[0, 'Sans rappel'], [5, '5 min avant'],
+            [15, '15 min avant'], [30, '30 min avant'], [60, '1 h avant']]) {
+            const option = node('option', text);
+            option.value = String(value);
+            option.selected = value === 15;
+            select.append(option);
+        }
+        select.value = '15';
+        label.append(select);
+        const link = node('a', 'Télécharger le calendrier', controlStyle);
+        link.setAttribute('aria-label', `Télécharger le calendrier : ${program.name}`);
+        const update = () => {
+            link.href = `/api/programs/${encodeURIComponent(program.id)}/calendar?reminder=${select.value}`;
+        };
+        update();
+        select.addEventListener('change', update);
+        group.append(label, link);
+        return group;
+    }
+
+    function paintFavorite(button, selected) {
+        button.setAttribute('aria-pressed', String(selected));
+        button.textContent = selected ? 'Retirer des favoris' : 'Ajouter aux favoris';
+    }
+
+    function renderFavorites(programs) {
+        const ids = new Set(programs.map(program => program.id));
+        for (const button of document.querySelectorAll('[data-favorite-id]')) {
+            paintFavorite(button, ids.has(button.dataset.favoriteId));
+        }
+        favoritesHistory.replaceChildren(...programs.map(program => {
+            const row = node('div', '', 'tw-rounded tw-border tw-border-solid tw-border-slate-200 tw-p-4');
+            const date = new Date(program.start);
+            const formatted = Number.isNaN(date.getTime()) ? 'Horaire inconnu' : new Intl.DateTimeFormat('fr-FR', {
+                timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long',
+                year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }).format(date);
+            row.append(node('h3', program.name, 'tw-font-semibold'),
+                node('p', `${program.channel_name} — ${formatted}`, 'tw-text-sm'),
+                node('p', program.desc || 'Résumé indisponible.', 'tw-text-sm'));
+            if (new Date(program.end).getTime() <= Date.now()) {
+                row.append(node('p', 'Diffusion terminée.', 'tw-text-sm tw-text-slate-600'));
+            }
+            const remove = node('button', 'Retirer des favoris', controlStyle);
+            remove.type = 'button';
+            remove.setAttribute('aria-label', `Retirer des favoris : ${program.name}`);
+            remove.addEventListener('click', async () => {
+                remove.disabled = true;
+                try {
+                    await request(`/api/programs/${encodeURIComponent(program.id)}/favorite`, 'DELETE');
+                    await refresh();
+                    favoritesStatus.textContent = 'Favori retiré.';
+                } catch (error) {
+                    favoritesStatus.textContent = error.message;
+                } finally {
+                    remove.disabled = false;
+                }
+            });
+            row.append(remove, calendarControls(program));
+            return row;
+        }));
+        if (!programs.length) favoritesHistory.append(node('p', 'Aucun favori enregistré.'));
+    }
+
+    function favoriteControls(program) {
+        const container = node('div', '', 'tw-mt-4 tw-space-y-3');
+        const button = node('button', '', controlStyle);
+        button.type = 'button';
+        button.dataset.favoriteId = program.id;
+        button.setAttribute('aria-label', `Favori : ${program.name}`);
+        paintFavorite(button, Boolean(program.favorite));
+        const message = node('p', '', 'tw-text-sm');
+        message.setAttribute('role', 'status');
+        button.addEventListener('click', async () => {
+            const selected = button.getAttribute('aria-pressed') === 'true';
+            button.disabled = true;
+            try {
+                await request(`/api/programs/${encodeURIComponent(program.id)}/favorite`, selected ? 'DELETE' : 'PUT');
+                paintFavorite(button, !selected);
+                message.textContent = selected ? 'Favori retiré.' : 'Favori enregistré pour cette diffusion.';
+                await refresh();
+            } catch (error) {
+                message.textContent = error.message;
+            } finally {
+                button.disabled = false;
+                if (document.activeElement === document.body || document.activeElement === button) {
+                    button.focus({ preventScroll: true });
+                }
+            }
+        });
+        container.append(button, calendarControls(program), message);
+        return container;
+    }
 
     function feedbackControls(program) {
         const container = node('div', '', 'tw-mt-4 tw-flex tw-flex-wrap tw-gap-2');
@@ -177,6 +281,6 @@
         return container;
     }
 
-    window.Personalization = { refresh, feedbackControls, onChange: null };
+    window.Personalization = { refresh, feedbackControls, favoriteControls, onChange: null };
     refresh(true);
 })();

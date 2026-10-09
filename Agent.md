@@ -1,6 +1,6 @@
 # Suivi de ProgTV
 
-Mis à jour : 2026-10-08.
+Mis à jour : 2026-10-09.
 
 ## Règle de maintenance
 Mettre ce fichier à jour à chaque évolution : comportement livré, validations,
@@ -178,9 +178,23 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Limite : correction fixe demandée pour la source actuelle ; à réévaluer
     si l’API corrige ses horaires. Instantanés SQLite des anciens votes inchangés.
 
+- 2026-10-09 : favoris par diffusion et rappels par export calendrier.
+  - Favoris indépendants des avis, persistés dans SQLite par profil avec
+    instantané complet ; ajout idempotent et retrait même après disparition du cache.
+  - Boutons sur les cartes et panneau Mes favoris et rappels ; date complète,
+    résumé, diffusion terminée signalée. Cartes et focus conservés au clic.
+  - Export .ics sur carte ou favori, rappel 0/5/15/30/60 minutes (15 par défaut),
+    horaires UTC, identifiant stable, échappement texte et lignes UTF-8 repliées.
+  - Validation : 52 tests Python et 12 tests JavaScript réussis ; syntaxe JS,
+    build Tailwind et git diff --check. Cas : isolation, persistance hors cache,
+    avis indépendants, changement d’heure, injection et erreurs de stockage.
+    Cache réel avec SQLite isolé : page, ajout, lecture, export et retrait HTTP 200.
+  - Limites : import manuel dans une application calendrier pour les alertes ;
+    instantané sans abonnement ni resynchronisation des changements d’horaires.
+    Retirer un favori n’efface pas un événement importé. Pas de test visuel navigateur.
+
 ## Prochaine étape
-Ajouter les favoris et les rappels/export calendrier, puis évaluer le classement
-personnalisé sur des retours indépendants. Les profils nommés du foyer restent
+Évaluer le classement personnalisé sur des retours indépendants. Les profils nommés du foyer restent
 une évolution ultérieure.
 
 ## Limites du premier lot

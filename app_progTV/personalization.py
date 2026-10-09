@@ -70,6 +70,13 @@ class ProfileStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as db, db:
             db.executescript('''
+                CREATE TABLE IF NOT EXISTS favorites (
+                    profile_id TEXT NOT NULL,
+                    program_id TEXT NOT NULL,
+                    program_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (profile_id, program_id)
+                );
                 CREATE TABLE IF NOT EXISTS preferences (
                     profile_id TEXT PRIMARY KEY,
                     payload TEXT NOT NULL
@@ -151,6 +158,32 @@ class ProfileStore:
                      json.dumps(program, ensure_ascii=False, allow_nan=False)),
                 )
         return key
+
+    def favorites(self, profile_id):
+        with closing(self.connect()) as db:
+            rows = db.execute(
+                'SELECT program_id, program_json FROM favorites '
+                'WHERE profile_id=? ORDER BY created_at DESC, program_id',
+                (profile_id,),
+            ).fetchall()
+        return {key: json.loads(payload) for key, payload in rows}
+
+    def save_favorite(self, profile_id, program):
+        with closing(self.connect()) as db, db:
+            db.execute(
+                'INSERT INTO favorites (profile_id, program_id, program_json) '
+                'VALUES (?, ?, ?) ON CONFLICT(profile_id, program_id) '
+                'DO UPDATE SET program_json=excluded.program_json',
+                (profile_id, program['id'],
+                 json.dumps(program, ensure_ascii=False, allow_nan=False)),
+            )
+
+    def remove_favorite(self, profile_id, program_id):
+        with closing(self.connect()) as db, db:
+            db.execute(
+                'DELETE FROM favorites WHERE profile_id=? AND program_id=?',
+                (profile_id, program_id),
+            )
 
     def remove_feedback(self, profile_id, key):
         with closing(self.connect()) as db, db:

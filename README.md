@@ -136,16 +136,42 @@ Les compteurs d'avis et `like_ratio` sont descriptifs : ce taux n'est pas une
 mesure de précision ni une preuve d'amélioration. Les pondérations initiales
 restent à évaluer sur des retours indépendants des données de classement.
 
+### Favoris et rappels
+
+Chaque carte permet d’**ajouter une diffusion aux favoris**, indépendamment de
+J’aime, Pas pour moi ou Déjà vu. Ouvrir **Mes favoris et rappels** pour retrouver
+le titre, le résumé, la chaîne et la date complète. Les favoris sont conservés
+par navigateur dans la même base SQLite et restent consultables après disparition
+du cache ; les rediffusions sont des favoris distincts. Ajouter ou retirer un
+favori conserve les cartes et la position dans la page.
+
+Le lien **Télécharger le calendrier** exporte cette diffusion au format `.ics`.
+Choisir un rappel de 5, 15, 30 ou 60 minutes avant le début (15 par défaut),
+ou Sans rappel. Importer le fichier dans son application calendrier pour activer
+l’événement et son alerte. Les heures sont exportées en UTC pour conserver
+l’instant exact, y compris lors des changements d’heure. L’export d’un favori
+reste disponible hors cache. Une diffusion terminée est signalée dans la liste.
+
+Le fichier contient les horaires enregistrés lors de l’ajout du favori ;
+il ne constitue pas un abonnement actualisé automatiquement. Retirer un favori
+ne supprime pas un événement déjà importé. Les notifications dépendent de
+l’application calendrier, pas d’un service d’alertes dans ProgTV.
+
 ### API du profil
 
-- `GET /api/profile` : préférences, choix disponibles, historique et compteurs.
+- `GET /api/profile` : préférences, choix disponibles, historique, compteurs et favoris.
 - `PUT /api/profile` : remplacer les préférences (objet JSON ; champs omis remis
   à leur valeur par défaut). Liste de 30 textes maximum, 100 caractères chacun.
 - `PUT /api/programs/<id>/feedback` : `{"value":"like"}`, `dislike`, `seen` ou
   `null` pour annuler. Programme absent du cache : 404.
 - `DELETE /api/feedback/<content_id>` : annuler un avis enregistré.
+- `PUT /api/programs/<id>/favorite` : ajouter une diffusion au cache aux favoris.
+- `DELETE /api/programs/<id>/favorite` : retirer un favori, même hors cache.
+- `GET /api/programs/<id>/calendar?reminder=15` : fichier `.ics` ; rappel
+  0 (aucun), 5, 15, 30 ou 60 minutes. Export hors cache réservé aux favoris
+  du profil courant. Horaires invalides : 422.
 
-Les listes de programmes incluent désormais `content_id` et `feedback` ; les
+Les listes de programmes incluent désormais `content_id`, `feedback` et `favorite` ; les
 suggestions ajoutent `recommendation_score` et `recommendation_reasons`.
 Les réponses personnalisées sont marquées `private, no-store`.
 

@@ -9,10 +9,11 @@ import secrets
 import sqlite3
 from zoneinfo import ZoneInfo
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, Response, g, jsonify, render_template, request
 import pandas as pd
 
 import progtv
+from calendar_export import calendar_event
 from personalization import (
     ProfileStore, annotate, content_id, feedback_metrics, personalize,
     validate_preferences,
@@ -27,7 +28,7 @@ COMMENT_CACHE = {}
 FIELDS = [
     'id', 'name', 'start', 'end', 'icon', 'rating', 'cat', 'desc',
     'note_pred', 'duration', 'channel_name', 'channel_icon', 'content_id',
-    'feedback', 'recommendation_score', 'recommendation_reasons',
+    'feedback', 'favorite', 'recommendation_score', 'recommendation_reasons',
 ]
 
 
@@ -134,6 +135,8 @@ def response_for(suggestions=False):
         ).head(5)
     else:
         frame = annotate(frame, feedback)
+    favorites = store.favorites(identity)
+    frame['favorite'] = frame['id'].isin(favorites)
     response = jsonify(serialize(frame))
     response.headers['X-Programs-Date'] = data_date
     response.headers['X-Programs-View-Date'] = selected_date.isoformat()
@@ -200,6 +203,7 @@ def profile():
     return jsonify(
         preferences=store.preferences(identity),
         feedback=list(feedback.values()),
+        favorites=list(store.favorites(identity).values()),
         metrics=feedback_metrics(feedback), choices=choices,
     )
 
@@ -225,6 +229,43 @@ def save_feedback(program_id):
 def remove_feedback(key):
     profile_store().remove_feedback(profile_id(), key)
     return jsonify(deleted=True)
+
+
+@app.route('/api/programs/<program_id>/favorite', methods=['PUT', 'DELETE'])
+def favorite(program_id):
+    store = profile_store()
+    identity = profile_id()
+    if request.method == 'DELETE':
+        store.remove_favorite(identity, program_id)
+        return jsonify(favorite=False)
+    _, program, error = find_program(program_id)
+    if error is not None:
+        return error
+    store.save_favorite(identity, program)
+    return jsonify(favorite=True)
+
+
+@app.route('/api/programs/<program_id>/calendar')
+def program_calendar(program_id):
+    try:
+        reminder = int(request.args.get('reminder', '15'))
+        if reminder not in (0, 5, 15, 30, 60):
+            raise ValueError()
+    except ValueError:
+        return jsonify(error='Rappel attendu : 0, 5, 15, 30 ou 60 minutes.'), 400
+    # L’instantané du favori reste accessible lorsque le cache a disparu.
+    program = profile_store().favorites(profile_id()).get(program_id)
+    if program is None:
+        _, program, error = find_program(program_id)
+        if error is not None:
+            return error
+    try:
+        body = calendar_event(program, reminder)
+    except (ValueError, TypeError):
+        return jsonify(error='Horaires indisponibles pour cet export.'), 422
+    return Response(body, content_type='text/calendar; charset=utf-8', headers={
+        'Content-Disposition': 'attachment; filename="progtv.ics"',
+    })
 
 
 @app.route('/api/programs/<program_id>/comment')

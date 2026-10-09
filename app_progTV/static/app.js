@@ -83,6 +83,7 @@ function renderProgram(program, suggestions) {
         body.append(button, comment);
     }
     if (window.Personalization) body.append(window.Personalization.feedbackControls(program));
+    if (window.Personalization) body.append(window.Personalization.favoriteControls(program));
     card.append(body);
     return card;
 }
