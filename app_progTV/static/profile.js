@@ -6,6 +6,7 @@
     const history = document.getElementById('feedback-history');
     const favoritesHistory = document.getElementById('favorites-history');
     const favoritesStatus = document.getElementById('favorites-status');
+    const learnedSummary = document.getElementById('learned-tastes-summary');
     const metrics = document.getElementById('feedback-metrics');
     const controls = {
         liked_categories: document.getElementById('liked-categories'),
@@ -13,11 +14,12 @@
         preferred_channels: document.getElementById('preferred-channels'),
         keywords: document.getElementById('keywords'),
         avoid_keywords: document.getElementById('avoid-keywords'),
-        max_duration: document.getElementById('preferred-duration')
+        max_duration: document.getElementById('preferred-duration'),
+        learn_from_likes: document.getElementById('learn-from-likes')
     };
     const labels = { like: 'J’aime', dislike: 'Pas pour moi', seen: 'Déjà vu' };
     const defaults = { liked_categories: [], disliked_categories: [], preferred_channels: [],
-        keywords: [], avoid_keywords: [], max_duration: null };
+        keywords: [], avoid_keywords: [], max_duration: null, learn_from_likes: true };
     let ready = false;
     let generation = 0;
 
@@ -42,7 +44,9 @@
 
     function fillPreferences(preferences, choices) {
         for (const [key, select] of Object.entries(controls)) {
-            if (['keywords', 'avoid_keywords'].includes(key)) {
+            if (key === 'learn_from_likes') {
+                select.checked = preferences[key] !== false;
+            } else if (['keywords', 'avoid_keywords'].includes(key)) {
                 select.value = preferences[key].join(', ');
             } else if (key === 'max_duration') {
                 select.value = preferences[key] ?? '';
@@ -78,6 +82,7 @@
                     undo.disabled = true;
                     try {
                         await request(`/api/feedback/${encodeURIComponent(entry.content_id)}`, 'DELETE');
+                        window.Personalization.onProfileChange?.();
                         await refresh();
                         window.Personalization.onChange?.();
                     } catch (error) {
@@ -91,6 +96,8 @@
             }));
             if (!data.feedback.length) history.append(node('p', 'Aucun avis enregistré.'));
             renderFavorites(data.favorites || []);
+            learnedSummary.textContent = (data.preferences.learn_from_likes === false ? 'Utilisation des goûts appris désactivée. ' : '')
+                + (data.learned_tastes?.summary || 'Ajoutez des J’aime pour apprendre vos goûts.');
             if (fill) status.textContent = '';
         } catch (error) {
             status.textContent = error.message;
@@ -100,7 +107,9 @@
     function readPreferences() {
         const result = {};
         for (const [key, input] of Object.entries(controls)) {
-            if (['keywords', 'avoid_keywords'].includes(key)) {
+            if (key === 'learn_from_likes') {
+                result[key] = input.checked;
+            } else if (['keywords', 'avoid_keywords'].includes(key)) {
                 result[key] = input.value.split(',').map(word => word.trim()).filter(Boolean);
             } else if (key === 'max_duration') {
                 result[key] = input.value ? Number(input.value) : null;
@@ -116,6 +125,7 @@
         status.textContent = 'Enregistrement…';
         try {
             await request('/api/profile', 'PUT', preferences);
+            window.Personalization.onProfileChange?.();
             await refresh(true);
             status.textContent = 'Préférences enregistrées.';
             window.Personalization.onChange?.();
@@ -260,6 +270,7 @@
                     await request(`/api/programs/${encodeURIComponent(program.id)}/feedback`, 'PUT', { value: next });
                     selected = next;
                     program.feedback = next;
+                    window.Personalization.onProfileChange?.();
                     paint();
                     message.textContent = next ? 'Avis enregistré.' : 'Avis annulé.';
                     await refresh();

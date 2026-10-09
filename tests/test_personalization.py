@@ -111,7 +111,7 @@ class ProfileAPITests(unittest.TestCase):
         self.loader = patch.object(web, 'load_programs', return_value=(self.tv, self.data, '2026-10-08'))
         self.loader.start()
         self.client = web.app.test_client()
-        web.COMMENT_CACHE.clear()
+
 
     def tearDown(self):
         self.loader.stop()

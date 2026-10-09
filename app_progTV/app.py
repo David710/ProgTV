@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import lru_cache
 import json
 import logging
 import math
@@ -13,6 +14,7 @@ from flask import Flask, Response, g, jsonify, render_template, request
 import pandas as pd
 
 import progtv
+from explanations import context_for, explanation_events, schedule_warmup
 from calendar_export import calendar_event
 from personalization import (
     ProfileStore, annotate, content_id, feedback_metrics, personalize,
@@ -24,7 +26,7 @@ app.config['PROFILE_DATABASE'] = os.environ.get(
     'PROGTV_DATABASE', str(Path(app.instance_path) / 'profiles.sqlite3')
 )
 logger = logging.getLogger(__name__)
-COMMENT_CACHE = {}
+app.config['LLM_WARMUP'] = os.environ.get('PROGTV_LLM_WARMUP', '1') == '1'
 FIELDS = [
     'id', 'name', 'start', 'end', 'icon', 'rating', 'cat', 'desc',
     'note_pred', 'duration', 'channel_name', 'channel_icon', 'content_id',
@@ -65,6 +67,12 @@ def profile_storage_error(error):
     return jsonify(error='Profil temporairement indisponible. Réessayez.'), 503
 
 
+@lru_cache(maxsize=2)
+def cached_programs(path, modified, size):
+    # mtime_ns et taille invalident le cache quand la préparation remplace le fichier.
+    return progtv.TVProgram().read_programs(path)
+
+
 def load_programs():
     tv = progtv.TVProgram()
     today = datetime.now(ZoneInfo('Europe/Paris')).date().isoformat()
@@ -76,7 +84,8 @@ def load_programs():
     # Un cache du jour corrompu ne doit pas masquer le dernier cache valide.
     for path in paths:
         try:
-            data = tv.read_programs(path)
+            stat = path.stat()
+            data = cached_programs(str(path), stat.st_mtime_ns, stat.st_size)
             if data is not None:
                 tv.flatten_programs(data)
                 return tv, data, path.stem.removeprefix('progtv_rated_')
@@ -132,7 +141,10 @@ def response_for(suggestions=False):
     if view == 'suggestions':
         frame = personalize(
             frame, store.preferences(identity), feedback,
+            tastes=store.tastes(identity),
         ).head(5)
+        if app.config['LLM_WARMUP']:
+            schedule_warmup()
     else:
         frame = annotate(frame, feedback)
     favorites = store.favorites(identity)
@@ -205,6 +217,7 @@ def profile():
         feedback=list(feedback.values()),
         favorites=list(store.favorites(identity).values()),
         metrics=feedback_metrics(feedback), choices=choices,
+        learned_tastes=store.tastes(identity),
     )
 
 
@@ -268,40 +281,37 @@ def program_calendar(program_id):
     })
 
 
+@app.route('/api/profile/tastes')
+def export_tastes():
+    store = profile_store()
+    identity = profile_id()
+    body = json.dumps({'preferences': store.preferences(identity),
+                       'learned_tastes': store.tastes(identity)},
+                      ensure_ascii=False, indent=2)
+    return Response(body, content_type='application/json; charset=utf-8',
+                    headers={'Content-Disposition':
+                             'attachment; filename="mes-gouts-progtv.json"'})
+
+
 @app.route('/api/programs/<program_id>/comment')
 def get_comment(program_id):
     tv, program, error = find_program(program_id)
     if error is not None:
         return error
-    description = str(program.get('desc') or '')
     store = profile_store()
     identity = profile_id()
-    preferences = store.preferences(identity)
-    feedback = store.feedback(identity)
-    preferences['feedback_context'] = {
-        'programme': feedback.get(content_id(program), {}).get('value'),
-        'categories_avec_avis_positifs': sorted({
-            row['category'] for row in feedback.values()
-            if row['value'] == 'like' and row['category']
-        }),
-    }
-    cache_key = (
-        program_id, description, json.dumps(preferences, sort_keys=True),
-    )
-    if cache_key not in COMMENT_CACHE:
-        try:
-            comment = tv.get_ollama_comment(
-                description, preferences=preferences,
-            )
-        except Exception:
-            logger.exception('Génération du commentaire impossible')
-            return jsonify(error=(
-                'Explication temporairement indisponible. Réessayez.'
-            )), 503
-        if len(COMMENT_CACHE) >= 256:
-            COMMENT_CACHE.pop(next(iter(COMMENT_CACHE)))
-        COMMENT_CACHE[cache_key] = comment
-    return jsonify(id=program_id, comment=COMMENT_CACHE[cache_key])
+    context = context_for(program, store.preferences(identity),
+                          store.feedback(identity), store.tastes(identity))
+    events = explanation_events(store, identity, program, context,
+                                tv.get_ollama_comment)
+    if request.args.get('stream') == '1':
+        def stream():
+            for event in events:
+                yield json.dumps(event, ensure_ascii=False) + '\n'
+        return Response(stream(), content_type='application/x-ndjson',
+                        headers={'X-Accel-Buffering': 'no'})
+    result = list(events)[-1]
+    return jsonify(id=program_id, **result)
 
 
 if __name__ == '__main__':

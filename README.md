@@ -40,7 +40,17 @@ Pour un environnement Python déjà installé ailleurs :
 `PROGTV_PYTHON=/chemin/venv/bin/python ./run.sh`.
 
 La page fonctionne sans Ollama ; seules les explications en dépendent.
-Pour celles-ci, installer Ollama et récupérer `gemma3:12b-it-qat`.
+Pour celles-ci, installer Ollama puis télécharger le modèle par défaut :
+
+```sh
+ollama pull qwen3.5:9b
+```
+
+`PROGTV_LLM_MODEL` permet de choisir un autre modèle installé. Qwen est appelé
+sans raisonnement, avec une sortie courte ; le SDK Ollama >=0.6 est nécessaire.
+Le modèle est préchargé en arrière-plan à la consultation des suggestions et
+reste en mémoire 30 minutes après utilisation. `PROGTV_LLM_WARMUP=0` désactive
+ce préchargement.
 Ne pas exposer le serveur de développement Flask en production.
 
 ## Préparation des données
@@ -133,8 +143,58 @@ Une seule diffusion par titre est proposée dans les suggestions, même si plusi
 personnalisé est conservée ; à égalité de scores, la plus proche est retenue.
 Les autres vues continuent d’afficher toutes les diffusions.
 Les raisons sont affichées sur les cartes ; `note_pred` reste inchangée. Le modèle
-PyTorch n'est pas réentraîné à chaque avis. Les explications Ollama utilisent le
-profil et les avis, sans goûts prédéfinis, et leur cache tient compte de ce contexte.
+PyTorch n'est pas réentraîné à chaque avis.
+
+### Goûts appris à partir des J’aime
+
+Chaque vote recalcule un profil de goûts dans SQLite (`learned_tastes`), sans
+attendre Ollama. Genres et chaînes proviennent des contenus aimés ; les thèmes
+sont des mots présents dans au moins **deux résumés distincts aimés**, après
+normalisation et suppression de mots courants. Les compteurs comptent les
+contenus, pas leurs rediffusions. Changer un J’aime en Déjà vu/Pas pour moi,
+ou annuler un avis, retire immédiatement sa contribution.
+
+Dans le classement, l’ajustement par genre reste limité à 0,15 en valeur absolue.
+Une chaîne de vos J’aime reçoit un bonus inférieur à 0,08, et la présence de
+thèmes récurrents ajoute 0,12 au maximum. Les préférences et exclusions manuelles
+restent prioritaires. Décocher **Adapter les suggestions aux goûts appris**
+désactive ces ajustements ; le bonus direct sur un contenu aimé reste actif.
+Les cartes restent en place pendant les votes ; le classement se recalcule à
+la prochaine consultation des suggestions.
+
+**Mes goûts appris** affiche le résumé et permet de télécharger
+`mes-gouts-progtv.json`, contenant les préférences, les compteurs, les thèmes et
+les contenus sources. SQLite reste la source des données ; le JSON est un export
+consultable, pas un fichier à maintenir manuellement. Les anciens votes sans
+instantané complet contribuent aux genres mais pas aux thèmes ni aux chaînes.
+Ce profil est calculé localement : le LLM ne peut pas inventer de goûts, et aucun
+texte généré n’écrase les choix explicites. Les mots appris sont des indices
+lexicaux, pas une compréhension des synonymes ou une preuve de préférence forte.
+
+### Explications rapides et vérifiables
+
+**Pourquoi ce programme ?** affiche immédiatement les raisons du classement,
+puis reçoit en deux étapes un complément Qwen. Le modèle reçoit le titre,
+la catégorie, la chaîne, la durée, le résumé, les goûts et les raisons calculées.
+Il sélectionne un court extrait ; le serveur vérifie que cet extrait existe
+littéralement dans le résumé avant de l’afficher. Aucune appréciation libre du
+LLM n’est affichée. Un résumé absent ne déclenche pas d’appel au modèle.
+Si Ollama est indisponible, la première explication reste visible et le complément
+peut être réessayé. Les réponses chargées dans les cartes sont invalidées après
+un changement de goûts ou d’avis.
+
+Les explications validées sont conservées dans SQLite (`explanations`), au plus
+256 par profil, et réutilisées après redémarrage. La clé tient compte du contenu,
+de la chaîne/durée, des goûts pertinents, du modèle et de la version des consignes ;
+elle n’inclut pas l’horaire ou l’identifiant de diffusion, pour partager le cache
+entre rediffusions équivalentes. Les requêtes concurrentes identiques sont
+regroupées dans chaque processus Flask. Un seul appel Ollama est actif à la fois
+pour éviter la concurrence GPU ; en cas d’occupation, les raisons restent
+accessibles et l’interface propose de réessayer.
+
+Les données TV déjà chargées sont réutilisées en mémoire ; leur cache est invalidé
+lorsque le fichier préparé change. Aucun recalcul d’embeddings n’est nécessaire
+pour les goûts appris ou les explications.
 
 Les compteurs d'avis et `like_ratio` sont descriptifs : ce taux n'est pas une
 mesure de précision ni une preuve d'amélioration. Les pondérations initiales
@@ -163,9 +223,14 @@ l’application calendrier, pas d’un service d’alertes dans ProgTV.
 
 ### API du profil
 
-- `GET /api/profile` : préférences, choix disponibles, historique, compteurs et favoris.
+- `GET /api/profile` : préférences, choix disponibles, historique, compteurs, favoris
+  et `learned_tastes`.
+- `GET /api/profile/tastes` : export JSON du profil et des goûts appris.
+- `GET /api/programs/<id>/comment?stream=1` : événements NDJSON `base`, puis
+  `done` ou `fallback`. Sans `stream=1`, réponse JSON finale.
 - `PUT /api/profile` : remplacer les préférences (objet JSON ; champs omis remis
   à leur valeur par défaut). Liste de 30 textes maximum, 100 caractères chacun.
+  `learn_from_likes` accepte un booléen (vrai par défaut).
 - `PUT /api/programs/<id>/feedback` : `{"value":"like"}`, `dislike`, `seen` ou
   `null` pour annuler. Programme absent du cache : 404.
 - `DELETE /api/feedback/<content_id>` : annuler un avis enregistré.

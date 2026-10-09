@@ -8,6 +8,7 @@ import sqlite3
 import unicodedata
 
 import pandas as pd
+from tastes import learn_tastes, words
 
 DEFAULT_PREFERENCES = {
     'liked_categories': [],
@@ -16,6 +17,7 @@ DEFAULT_PREFERENCES = {
     'keywords': [],
     'avoid_keywords': [],
     'max_duration': None,
+    'learn_from_likes': True,
 }
 FEEDBACK_VALUES = {'like', 'dislike', 'seen'}
 
@@ -42,7 +44,10 @@ def validate_preferences(payload):
     result = {}
     for key, default in DEFAULT_PREFERENCES.items():
         value = payload.get(key, default)
-        if key == 'max_duration':
+        if key == 'learn_from_likes':
+            if type(value) is not bool:
+                raise ValueError('Apprentissage attendu : vrai ou faux.')
+        elif key == 'max_duration':
             if value is not None and (
                 type(value) is not int or not 1 <= value <= 1440
             ):
@@ -70,6 +75,17 @@ class ProfileStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as db, db:
             db.executescript('''
+                CREATE TABLE IF NOT EXISTS learned_tastes (
+                    profile_id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS explanations (
+                    profile_id TEXT NOT NULL,
+                    cache_key TEXT NOT NULL,
+                    comment TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (profile_id, cache_key)
+                );
                 CREATE TABLE IF NOT EXISTS favorites (
                     profile_id TEXT NOT NULL,
                     program_id TEXT NOT NULL,
@@ -107,7 +123,7 @@ class ProfileStore:
                 'SELECT payload FROM preferences WHERE profile_id = ?',
                 (profile_id,),
             ).fetchone()
-        return json.loads(row[0]) if row else validate_preferences({})
+        return validate_preferences(json.loads(row[0]) if row else {})
 
     def save_preferences(self, profile_id, preferences):
         preferences = validate_preferences(preferences)
@@ -125,11 +141,17 @@ class ProfileStore:
             db.row_factory = sqlite3.Row
             rows = db.execute(
                 'SELECT content_id, program_id, name, category, value, '
-                'updated_at '
+                'updated_at, program_json '
                 'FROM feedback WHERE profile_id = ? '
                 'ORDER BY updated_at DESC, content_id', (profile_id,),
             ).fetchall()
-        return {row['content_id']: dict(row) for row in rows}
+        result = {}
+        for row in rows:
+            entry = dict(row)
+            payload = entry.pop('program_json')
+            entry['program'] = json.loads(payload) if payload else None
+            result[entry['content_id']] = entry
+        return result
 
     def save_feedback(self, profile_id, program, value):
         if value not in FEEDBACK_VALUES and value is not None:
@@ -157,6 +179,7 @@ class ProfileStore:
                      str(program.get('cat') or ''), value,
                      json.dumps(program, ensure_ascii=False, allow_nan=False)),
                 )
+        self.refresh_tastes(profile_id)
         return key
 
     def favorites(self, profile_id):
@@ -191,6 +214,57 @@ class ProfileStore:
                 'DELETE FROM feedback WHERE profile_id=? AND content_id=?',
                 (profile_id, key),
             )
+        self.refresh_tastes(profile_id)
+
+    def refresh_tastes(self, profile_id):
+        # Recalculer sous verrou SQLite pour éviter les écritures obsolètes.
+        with closing(self.connect()) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            rows = db.execute(
+                'SELECT content_id, name, category, value, program_json '
+                'FROM feedback WHERE profile_id=?', (profile_id,),
+            ).fetchall()
+            feedback = {row[0]: dict(content_id=row[0], name=row[1],
+                                    category=row[2], value=row[3],
+                                    program=json.loads(row[4]) if row[4] else None)
+                        for row in rows}
+            tastes = learn_tastes(feedback)
+            db.execute(
+                'INSERT INTO learned_tastes VALUES (?, ?) '
+                'ON CONFLICT(profile_id) DO UPDATE SET payload=excluded.payload',
+                (profile_id, json.dumps(tastes, ensure_ascii=False)),
+            )
+        return tastes
+
+    def tastes(self, profile_id):
+        with closing(self.connect()) as db:
+            row = db.execute(
+                'SELECT payload FROM learned_tastes WHERE profile_id=?',
+                (profile_id,),
+            ).fetchone()
+        return json.loads(row[0]) if row else self.refresh_tastes(profile_id)
+
+    def cached_explanation(self, profile_id, key):
+        with closing(self.connect()) as db:
+            row = db.execute(
+                'SELECT comment FROM explanations '
+                'WHERE profile_id=? AND cache_key=?', (profile_id, key),
+            ).fetchone()
+        return row[0] if row else None
+
+    def cache_explanation(self, profile_id, key, comment):
+        with closing(self.connect()) as db, db:
+            db.execute(
+                'INSERT OR REPLACE INTO explanations '
+                '(profile_id, cache_key, comment) VALUES (?, ?, ?)',
+                (profile_id, key, comment),
+            )
+            db.execute(
+                'DELETE FROM explanations WHERE profile_id=? AND cache_key '
+                'NOT IN (SELECT cache_key FROM explanations WHERE profile_id=? '
+                'ORDER BY created_at DESC, rowid DESC LIMIT 256)',
+                (profile_id, profile_id),
+            )
 
 
 def annotate(programs, feedback):
@@ -203,7 +277,7 @@ def annotate(programs, feedback):
     return programs
 
 
-def personalize(programs, preferences, feedback):
+def personalize(programs, preferences, feedback, tastes=None):
     """Reranker sans modifier note_pred ; les exclusions précèdent le top 5."""
     programs = annotate(programs, feedback)
     text = pd.Series('', index=programs.index)
@@ -222,6 +296,11 @@ def personalize(programs, preferences, feedback):
     # Le rang normalisé ne dépend pas de l'échelle des notes d'entraînement.
     scores = pd.to_numeric(programs['note_pred'], errors='coerce')
     programs['recommendation_score'] = scores.rank(pct=True).fillna(0.0)
+    tastes = tastes if tastes is not None else learn_tastes(feedback)
+    auto = preferences.get('learn_from_likes', True)
+    learned_channels = {entry['value']: entry['count']
+                        for entry in tastes['channels']}
+    learned_words = {entry['value'] for entry in tastes['keywords']}
     learned = {}
     for entry in feedback.values():
         if entry['value'] in {'like', 'dislike'}:
@@ -247,11 +326,19 @@ def personalize(programs, preferences, feedback):
         if row['feedback'] == 'like':
             bonus += 0.35
             explanation.append('Vous avez aimé ce programme')
-        votes = learned.get(row.get('cat'), [])
+        votes = learned.get(row.get('cat'), []) if auto else []
         adjustment = 0.15 * sum(votes) / (len(votes) + 2)
         bonus += adjustment
         if adjustment > 0:
             explanation.append('Genre apprécié dans vos retours')
+        if auto and row['channel_name'] in learned_channels:
+            count = learned_channels[row['channel_name']]
+            bonus += 0.08 * count / (count + 2)
+            explanation.append('Chaîne présente dans vos J’aime')
+        recurring = sorted(learned_words & words(text.loc[index])) if auto else []
+        if recurring:
+            bonus += 0.12
+            explanation.append('Thèmes de vos J’aime : ' + ', '.join(recurring[:4]))
         programs.at[index, 'recommendation_score'] += bonus
         reasons.append(explanation or ['Classement du modèle'])
     programs['recommendation_reasons'] = reasons

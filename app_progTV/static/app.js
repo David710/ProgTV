@@ -2,6 +2,14 @@ const programsDiv = document.getElementById('programs');
 const pageTitle = document.getElementById('page-title');
 const statusDiv = document.getElementById('status');
 let activeRequest;
+let explanationVersion = 0;
+const commentRequests = new Set();
+
+function invalidateExplanations() {
+    explanationVersion += 1;
+    for (const controller of commentRequests) controller.abort();
+    commentRequests.clear();
+}
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -53,31 +61,89 @@ function renderProgram(program, suggestions) {
         body.append(element('p', 'tw-text-sm tw-text-blue-800', program.recommendation_reasons.join(' · ')));
     }
     if (suggestions) {
-        const button = element('button', 'btn btn-outline-primary', 'Pourquoi je vais aimer ?');
+        const button = element('button', 'btn btn-outline-primary', 'Pourquoi ce programme ?');
         button.type = 'button';
-        const comment = element('p', 'ai-comments mt-3');
+        const comment = element('p', 'ai-comments mt-3 tw-whitespace-pre-line');
+        comment.setAttribute('role', 'status');
         comment.hidden = true;
-        let loaded = false;
+        let loadedVersion = -1;
+        const renderedVersion = explanationVersion;
         button.addEventListener('click', async () => {
-            if (loaded) {
+            if (loadedVersion === explanationVersion) {
                 comment.hidden = !comment.hidden;
-                button.textContent = comment.hidden ? 'Pourquoi je vais aimer ?' : 'Cacher le commentaire';
+                button.textContent = comment.hidden ? 'Pourquoi ce programme ?' : 'Cacher l’explication';
                 return;
             }
+            const version = explanationVersion;
+            const controller = new AbortController();
+            commentRequests.add(controller);
             button.disabled = true;
             comment.hidden = false;
-            comment.textContent = 'Préparation de l’explication…';
+            comment.textContent = renderedVersion === version && program.recommendation_reasons?.length
+                ? program.recommendation_reasons.join(' · ') + '. Complément en préparation…'
+                : 'Analyse de vos préférences et avis…';
+            let complete = false;
             try {
-                const response = await fetch(`/api/programs/${encodeURIComponent(program.id)}/comment`);
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Explication indisponible.');
-                comment.textContent = data.comment;
-                loaded = true;
-                button.textContent = 'Cacher le commentaire';
+                const response = await fetch(`/api/programs/${encodeURIComponent(program.id)}/comment?stream=1`, {
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Explication indisponible.');
+                }
+                const apply = data => {
+                    if (controller.signal.aborted || version !== explanationVersion) return;
+                    if (data.comment) comment.textContent = data.comment;
+                    if (data.type === 'fallback') {
+                        comment.textContent += '\n' + data.message;
+                        button.textContent = 'Réessayer le complément';
+                        complete = true;
+                    } else if (data.type === 'done' || !data.type) {
+                        loadedVersion = version;
+                        button.textContent = 'Cacher l’explication';
+                        complete = true;
+                    }
+                };
+                if (response.headers.get('Content-Type')?.includes('application/x-ndjson')) {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+                            let newline;
+                            while ((newline = buffer.indexOf('\n')) >= 0) {
+                                const line = buffer.slice(0, newline);
+                                buffer = buffer.slice(newline + 1);
+                                if (line.trim()) apply(JSON.parse(line));
+                            }
+                            if (done) {
+                                if (buffer.trim()) apply(JSON.parse(buffer));
+                                break;
+                            }
+                        }
+                    } finally {
+                        reader.releaseLock();
+                    }
+                } else {
+                    apply(await response.json());
+                }
+                if (!complete && !controller.signal.aborted) throw new Error('Complément interrompu. Réessayez.');
             } catch (error) {
-                comment.textContent = error.message;
+                if (controller.signal.aborted) {
+                    comment.textContent = 'Vos goûts ont changé. Cliquez pour actualiser l’explication.';
+                } else {
+                    comment.textContent += '\n' + error.message;
+                }
+                button.textContent = 'Réessayer l’explication';
             } finally {
+                if (controller.signal.aborted) {
+                    comment.textContent = 'Vos goûts ont changé. Cliquez pour actualiser l’explication.';
+                    button.textContent = 'Réessayer l’explication';
+                }
                 button.disabled = false;
+                commentRequests.delete(controller);
             }
         });
         body.append(button, comment);
@@ -135,6 +201,7 @@ function updateNavigation() {
 }
 
 async function loadPrograms() {
+    invalidateExplanations();
     if (activeRequest) activeRequest.abort();
     if (!filtersForm.reportValidity()) {
         programsDiv.setAttribute('aria-busy', 'false');
@@ -219,6 +286,7 @@ document.getElementById('reset-filters').addEventListener('click', () => {
 loadPrograms();
 
 if (window.Personalization) {
+    window.Personalization.onProfileChange = invalidateExplanations;
     window.Personalization.onChange = () => {
         reloadFilters();
     };

@@ -31,7 +31,8 @@ function harness(search = '', withProfile = false) {
         'max-duration', 'filters', 'reset-filters', 'preferences-form', 'preferences-fields',
         'preferences-status', 'feedback-history', 'feedback-metrics', 'liked-categories',
         'disliked-categories', 'preferred-channels', 'keywords', 'avoid-keywords',
-        'preferred-duration', 'reset-preferences', 'favorites-history', 'favorites-status'];
+        'preferred-duration', 'reset-preferences', 'favorites-history', 'favorites-status',
+        'learned-tastes-summary', 'learn-from-likes'];
     const nodes = Object.fromEntries(ids.map(id => [id, new Element()]));
     const buttons = ['now', 'tonight', 'tomorrow', 'suggestions'].map(view => {
         const button = new Element('button');
@@ -56,7 +57,7 @@ function harness(search = '', withProfile = false) {
         createElement: tag => new Element(tag)
     };
     const context = { document, window, URL, URLSearchParams, AbortController,
-        Intl, Date, setTimeout, clearTimeout,
+        Intl, Date, TextDecoder, setTimeout, clearTimeout,
         fetch: (url, options) => {
             if (withProfile && url === '/api/profile' && options?.method === 'GET') {
                 return Promise.resolve({ ok: true, json: async () => profile });
@@ -135,7 +136,7 @@ test('literal text rendering and unsafe image URL rejected', async () => {
     assert.ok(elements.filter(node => node.tag === 'img').every(node => !node.src));
     const button = elements.find(node => node.tag === 'button');
     const pending = button.listeners.click();
-    assert.equal(h.requests[1].url, '/api/programs/stable-id/comment');
+    assert.equal(h.requests[1].url, '/api/programs/stable-id/comment?stream=1');
     respond(h.requests[1], { comment: '<script>comment</script>' });
     await pending;
     assert.ok(elements.some(node => node.textContent === '<script>comment</script>'));
@@ -296,4 +297,76 @@ test('favorite storage failure keeps the card state and history removal updates 
     await undo;
     assert.equal(button.attributes['aria-pressed'], 'false');
     assert.equal(h.requests.length, 3);
+});
+
+
+test('stream displays grounded reasons before the supplement and decodes split UTF-8', async () => {
+    const h = harness('?view=suggestions');
+    respond(h.requests[0], [{ ...program, recommendation_reasons: ['Catégorie préférée'] }]);
+    await flush();
+    const button = descendants(h.nodes.programs).find(node => node.tag === 'button');
+    const pending = button.listeners.click();
+    assert.ok(descendants(h.nodes.programs).some(node => node.textContent.includes('Catégorie préférée')));
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(JSON.stringify({ type: 'base', comment: 'Raison vérifiée.' }) + '\n');
+    let finish;
+    let read = 0;
+    const reader = {
+        read: () => {
+            if (read++ === 0) return Promise.resolve({ value: bytes, done: false });
+            if (read === 2) return new Promise(resolve => { finish = resolve; });
+            if (read === 3) return Promise.resolve({ value: tail, done: false });
+            return Promise.resolve({ done: true });
+        },
+        releaseLock() {}
+    };
+    const final = encoder.encode(JSON.stringify({ type: 'done', comment: 'Raison vérifiée. Été.' }) + '\n');
+    const split = final.indexOf(195) + 1;
+    const tail = final.slice(split);
+    h.requests[1].resolve({ ok: true, headers: { get: () => 'application/x-ndjson' },
+        body: { getReader: () => reader } });
+    await flush();
+    assert.ok(descendants(h.nodes.programs).some(node => node.textContent === 'Raison vérifiée.'));
+    finish({ value: final.slice(0, split), done: false });
+    await pending;
+    assert.ok(descendants(h.nodes.programs).some(node => node.textContent === 'Raison vérifiée. Été.'));
+    assert.equal(button.textContent, 'Cacher l’explication');
+});
+
+test('a vote invalidates loaded explanations without moving cards', async () => {
+    const h = harness('?view=suggestions', true);
+    respond(h.requests[0], [{ ...program, feedback: null }]);
+    await flush();
+    const card = h.nodes.programs.children[0];
+    const button = descendants(card).find(node => node.textContent === 'Pourquoi ce programme ?');
+    const initial = button.listeners.click();
+    respond(h.requests[1], { type: 'done', comment: 'Ancienne explication' });
+    await initial;
+    const like = descendants(card).find(node => node.textContent === 'J’aime');
+    const vote = like.listeners.click();
+    respond(h.requests[2], { feedback: 'like' });
+    await vote;
+    const reload = button.listeners.click();
+    assert.equal(h.requests.length, 4);
+    respond(h.requests[3], { type: 'done', comment: 'Nouvelle explication' });
+    await reload;
+    assert.equal(h.nodes.programs.children[0], card);
+    assert.ok(descendants(card).some(node => node.textContent === 'Nouvelle explication'));
+});
+
+test('fallback retains reasons and can retry instead of caching failure', async () => {
+    const h = harness('?view=suggestions');
+    respond(h.requests[0], [program]);
+    await flush();
+    const button = descendants(h.nodes.programs).find(node => node.tag === 'button');
+    const initial = button.listeners.click();
+    respond(h.requests[1], { type: 'fallback', comment: 'Raison fiable', message: 'Modèle indisponible' });
+    await initial;
+    assert.equal(button.textContent, 'Réessayer le complément');
+    assert.ok(descendants(h.nodes.programs).some(node => node.textContent.includes('Raison fiable')));
+    const retry = button.listeners.click();
+    assert.equal(h.requests.length, 3);
+    respond(h.requests[2], { type: 'done', comment: 'Raison fiable et citation' });
+    await retry;
+    assert.equal(button.textContent, 'Cacher l’explication');
 });

@@ -15,6 +15,7 @@ import torch
 from sklearn.preprocessing import StandardScaler
 from progtv import TVProgram, NeuralNetwork
 import app as web
+web.app.config['LLM_WARMUP'] = False
 
 
 def dataset():
@@ -176,7 +177,7 @@ class ProgramsTests(unittest.TestCase):
 class APITests(unittest.TestCase):
     def setUp(self):
         self.client = web.app.test_client()
-        web.COMMENT_CACHE.clear()
+
 
     def test_page_and_missing_data(self):
         with patch.object(web, 'load_programs', return_value=(TVProgram(), None, None)):
@@ -196,12 +197,15 @@ class APITests(unittest.TestCase):
             with patch.object(tv, 'get_ollama_comment', return_value='<b>Explication</b>') as generate:
                 for _ in range(2):
                     response = self.client.get(f'/api/programs/{program_id}/comment')
-                    self.assertEqual(response.json['comment'], '<b>Explication</b>')
+                    self.assertIn('<b>Explication</b>', response.json['comment'])
                 generate.assert_called_once()
             self.assertEqual(self.client.get('/api/programs/unknown/comment').status_code, 404)
-            web.COMMENT_CACHE.clear()
+
             with patch.object(tv, 'get_ollama_comment', side_effect=RuntimeError('offline')):
-                self.assertEqual(self.client.get(f'/api/programs/{program_id}/comment').status_code, 503)
+                self.client.put('/api/profile', json={'keywords': ['changed']})
+                response = self.client.get(f'/api/programs/{program_id}/comment')
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json['type'], 'fallback')
 
     def test_last_valid_cache_and_freshness(self):
         with tempfile.TemporaryDirectory() as folder:

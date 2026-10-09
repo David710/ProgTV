@@ -71,6 +71,10 @@
                             <input id="preferred-duration" type="number" min="1" max="1440" step="1" class="tw-w-full tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-p-2" placeholder="Sans limite">
                         </div>
                     </div>
+                    <label class="tw-block tw-text-sm">
+                        <input id="learn-from-likes" type="checkbox" checked>
+                        Adapter les suggestions aux goûts appris depuis mes J’aime
+                    </label>
                     <div class="tw-flex tw-flex-wrap tw-gap-2">
                         <button id="save-preferences" type="submit" class="tw-rounded tw-bg-blue-700 tw-text-white tw-px-4 tw-py-2 disabled:tw-opacity-50">Enregistrer</button>
                         <button id="reset-preferences" type="button" class="tw-rounded tw-border tw-border-solid tw-border-slate-300 tw-px-4 tw-py-2">Effacer les préférences</button>
@@ -78,6 +82,10 @@
                 </fieldset>
             </form>
             <p id="preferences-status" role="status" aria-live="polite" class="tw-mt-2 tw-text-sm"></p>
+            <h2 class="tw-text-lg tw-font-semibold tw-mt-4">Mes goûts appris</h2>
+            <p id="learned-tastes-summary" class="tw-text-sm tw-text-slate-600"></p>
+            <p class="tw-text-xs tw-text-slate-500">Genres et chaînes appris dès le premier J’aime ; thèmes présents dans au moins deux résumés aimés. Vos choix manuels restent prioritaires. Annuler un avis retire sa contribution.</p>
+            <a href="/api/profile/tastes" class="tw-text-sm tw-text-blue-800">Télécharger le résumé de mes goûts (JSON)</a>
             <h2 class="tw-text-lg tw-font-semibold tw-mt-4">Mes avis</h2>
             <p id="feedback-metrics" class="tw-text-sm tw-text-slate-600"></p>
             <div id="feedback-history" class="tw-max-h-64 tw-overflow-y-auto tw-space-y-2"></div>

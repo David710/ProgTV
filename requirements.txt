@@ -6,4 +6,4 @@ scikit-learn>=1.4,<2
 torch>=2.2,<3
 transformers>=4.40,<5
 sentencepiece>=0.2,<1
-ollama>=0.4,<1
+ollama>=0.6,<1

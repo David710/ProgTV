@@ -1,6 +1,6 @@
 # Suivi de ProgTV
 
-Mis à jour : 2026-10-09.
+Mis à jour : 2026-10-10.
 
 ## Règle de maintenance
 Mettre ce fichier à jour à chaque évolution : comportement livré, validations,
@@ -204,6 +204,34 @@ suggestions sans doublons et nombre de résultats. Vérification syntaxique Pyth
   - Limite : les titres explicitement différents (suffixes de saison/épisode)
     restent distincts ; aucune correspondance approximative ajoutée.
 
+- 2026-10-10 : explications rapides, vérifiables et apprentissage des goûts.
+  - Qwen 3.5 9B par défaut, think=false, sortie JSON courte, keep_alive 30 min,
+    préchauffage en arrière-plan dans Suggestions et un appel GPU à la fois.
+  - Pourquoi ce programme : raisons calculées immédiatement, puis extrait choisi
+    par le LLM et vérifié littéralement dans le résumé. Repli utilisable sans
+    Ollama et aucun appel si résumé absent ; affichage en deux étapes NDJSON.
+  - Cache SQLite par profil et contexte/contenu/modèle/version, partagé entre
+    rediffusions équivalentes, borné à 256 ; regroupement des appels simultanés
+    dans chaque processus. Invalidation des cartes après changement de goûts.
+  - Cache mémoire des données TV invalidé par date de modification et taille du
+    fichier ; pas de recalcul d’embeddings.
+  - Profil de goûts recalculé localement depuis les J’aime : genres, chaînes et
+    mots présents dans >=2 résumés distincts. Annulation/changement de vote
+    retire sa contribution. Choix manuels prioritaires, apprentissage désactivable.
+  - Panneau Mes goûts appris et export mes-gouts-progtv.json ; SQLite reste la
+    source. Aucun goût inventé par LLM et pas d’écrasement du formulaire manuel.
+  - Validation : 66 tests Python et 15 tests JS, compilation Tailwind et syntaxe
+    JS/Python, git diff --check. Persistance, isolation, concurrence, annulation,
+    citations rejetées, stream UTF-8, cache et exclusions couverts.
+  - Vérification Qwen réelle sur les 10 cas du comparatif, SQLite isolé :
+    extraits vérifiés, génération à chaud ~0,5–0,9 s ; route réelle : premier
+    événement ~0,11 s et réponse cachée ~0,11 s. Préchargement mesuré 6,2 s.
+  - Limites : mots appris lexicaux, pas de synonymes/sémantique ; anciennes
+    lignes sans instantané limitées au genre. Pas de contrôle visuel navigateur.
+    Un extrait exact garantit sa provenance, pas la qualité du résumé source.
+    Le réentraînement PyTorch et une synthèse libre des goûts par LLM restent
+    distincts de ce mécanisme. SDK Ollama >=0.6 requis.
+
 ## Prochaine étape
 Évaluer le classement personnalisé sur des retours indépendants. Les profils nommés du foyer restent
 une évolution ultérieure.
@@ -211,12 +239,12 @@ une évolution ultérieure.
 ## Limites du premier lot
 - Limitation initiale résolue : jeu annoté désormais présent, modèle v2 entraîné
   sur les données réelles ; poids historiques conservés.
-- Source distante et génération CamemBERT désormais vérifiées sur les données
-  réelles. Génération Ollama réelle toujours non testée.
+- Source distante, génération CamemBERT et génération Ollama Qwen vérifiées
+  sur les données réelles.
 - Vérification navigateur visuelle non effectuée ; JavaScript vérifié syntaxiquement.
-- Cache des commentaires local au processus, non persistant. Les goûts en dur
-  ont été remplacés par le profil et les avis ; modèle initial non réentraîné
-  automatiquement sur ces retours.
+- Cache des explications désormais persistant dans SQLite ; goûts issus des
+  préférences et avis. Modèle PyTorch initial non réentraîné automatiquement
+  sur ces retours.
 - Planification quotidienne documentée, pas installée sur le système.
 - Fichiers modèle/prétraitement séparés : garder les deux artefacts ensemble.
 
